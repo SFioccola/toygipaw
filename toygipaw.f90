@@ -26,15 +26,16 @@ PROGRAM toygipaw
   IMPLICIT NONE
 
   character(len=6) :: codename = 'TOYGIPAW'
-  character(len=80) :: diagonalization, dudk_method
+  character(len=80) :: diagonalization, verbosity, dudk_method
   real(dp) :: q_gipaw, diago_thr_init, conv_thr
   character ( len = 256 ) :: outdir
   character (len=256), external :: trimcheck
-  integer :: ios
+  integer :: ios, isolve, iverbosity
   
 
   NAMELIST / input_toygipaw / prefix, outdir, &
-                        diagonalization, q_gipaw, dudk_method, &
+                        diagonalization, isolve, iverbosity, &
+                        verbosity, q_gipaw, dudk_method, &
                         diago_thr_init, conv_thr
 
 #if defined(__MPI)
@@ -48,6 +49,8 @@ PROGRAM toygipaw
   CALL get_environment_variable ( 'ESPRESSO_TMPDIR', outdir )
   IF ( TRIM ( outdir ) == ' ' ) outdir = './'
   diagonalization = 'david'
+  isolve = -1
+  iverbosity = -1 
   q_gipaw = 0.01d0
   dudk_method = 'covariant'
   diago_thr_init = 1d-4
@@ -59,10 +62,39 @@ PROGRAM toygipaw
     IF ( ios /= 0 ) CALL errore ( codename, 'toygipaw', abs ( ios ) )
   ENDIF
 
+  ! further checks
+  if (isolve /= -1) &
+     call infomsg('toygipaw', '*** isolve is obsolete, use diagonalization instead ***')
+  if (iverbosity /= -1) &
+     call infomsg('gipaw_readin', '*** iverbosity is obsolete, use verbosity instead ***')
+
+  select case (diagonalization)
+     case('david')
+       isolve = 0
+     case('cg')
+       isolve = 1
+     case default
+       call errore('toygipaw', 'diagonalization can be ''david'' or ''cg''', 1)
+  end select
+
+  select case (verbosity)
+     case('low')
+       iverbosity = 1
+     case('medium')
+       iverbosity = 11
+     case('high')
+       iverbosity = 21
+     case default
+       call errore('toygipaw', 'verbosity can be ''low'', ''medium'' or ''high''', 1)
+  end select
+
   tmp_dir = trimcheck ( outdir )
   CALL mp_bcast ( tmp_dir, ionode_id, world_comm )
   CALL mp_bcast ( prefix, ionode_id, world_comm )
   CALL mp_bcast ( diagonalization, ionode_id, world_comm )
+  CALL mp_bcast ( verbosity, ionode_id, world_comm )
+  CALL mp_bcast (isolve, ionode_id, world_comm)
+  CALL mp_bcast (iverbosity, ionode_id, world_comm)
   CALL mp_bcast ( q_gipaw, ionode_id, world_comm )
   CALL mp_bcast ( dudk_method, ionode_id, world_comm )
   CALL mp_bcast ( diago_thr_init, ionode_id, world_comm )

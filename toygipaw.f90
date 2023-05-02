@@ -1,6 +1,7 @@
 ! toygipaw
 PROGRAM toygipaw
 
+  USE gipaw_module, ONLY : iverbosity
   USE constants, ONLY : eps12
   USE control_flags, ONLY : gamma_only, io_level
   USE environment, ONLY : environment_start, environment_end
@@ -34,7 +35,7 @@ PROGRAM toygipaw
   real(dp) :: q_gipaw, diago_thr_init, conv_threshold
   character ( len = 256 ) :: outdir
   character (len=256), external :: trimcheck
-  integer :: ios, isolve, iverbosity
+  integer :: ios, isolve
   
 
   NAMELIST / input_toygipaw / prefix, outdir, &
@@ -104,7 +105,7 @@ if (.not. ionode .or. my_image_id > 0) goto 400
   call gipaw_bcast_input
 #endif
 
-  io_level = 10
+  io_level = 1
 
   !read ground state wavefunctions  
   CALL read_file ( )

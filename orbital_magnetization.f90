@@ -20,7 +20,9 @@ MODULE orbital_magnetization
   INTEGER, ALLOCATABLE :: igk(:,:)
   real(dp) :: delta_k
 
-
+  REAL(DP), ALLOCATABLE :: &
+       dvrs(:,:,:)      ! gradient of (the total pot. in real space...)
+ 
  !-----------------------------------------------------------------------
 END MODULE orbital_magnetization
 !-----------------------------------------------------------------------

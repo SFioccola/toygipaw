@@ -1,11 +1,11 @@
 ! toygipaw
 PROGRAM toygipaw
 
-  USE gipaw_module, ONLY : iverbosity
+  USE gipaw_module
   USE constants, ONLY : eps12
   USE control_flags, ONLY : gamma_only, io_level
   USE environment, ONLY : environment_start, environment_end
-  USE io_files, ONLY : prefix, tmp_dir
+  USE io_files, ONLY : prefix, tmp_dir, nwordwfc, iunwfc
   USE io_global, ONLY : ionode, ionode_id
   USE kinds, ONLY : DP
   USE lsda_mod, ONLY : nspin, starting_magnetization !FZ: added starting_magnetization for spinors
@@ -27,21 +27,33 @@ PROGRAM toygipaw
   USE fft_base,  ONLY : dfftp    
   USE noncollin_module,   ONLY : noncolin, npol, m_loc, ux, angle1, angle2  !FZ: test for spinors
   USE ions_base,          ONLY : nat, tau, ntyp => nsp, ityp, zv  !FZ: test for spinors
+  USE control_flags, ONLY : restart, io_level, lscf, iprint, &
+                            david, max_cg_iter, &
+                            tr2, ethr, mixing_beta, nmix, niter
+  USE gvecs, ONLY: doublegrid
+  USE gvect, ONLY: gstart
+  USE wvfct, ONLY: btype
+  USE wvfct, ONLY: nbnd, nbndx
+  USE symm_base,     ONLY : nsym
+  USE noncollin_module, ONLY: report
+  USE basis, ONLY: starting_wfc
+  USE buffers,          ONLY : open_buffer, close_buffer, save_buffer
+  USE dfunct,             ONLY : newd
 
   IMPLICIT NONE
 
   character(len=6) :: codename = 'TOYGIPAW'
-  character(len=80) :: diagonalization, verbosity, dudk_method
-  real(dp) :: q_gipaw, diago_thr_init, conv_threshold
   character ( len = 256 ) :: outdir
   character (len=256), external :: trimcheck
-  integer :: ios, isolve
+  integer :: ios
+  logical :: exst
   
 
   NAMELIST / input_toygipaw / prefix, outdir, &
                         diagonalization, isolve, iverbosity, &
                         verbosity, q_gipaw, dudk_method, &
-                        diago_thr_init, conv_threshold
+                        diago_thr_init, conv_threshold, &
+                        lambda_so
 
 
 ! begin with the initialization part                
@@ -69,6 +81,7 @@ if (.not. ionode .or. my_image_id > 0) goto 400
   dudk_method = 'covariant'
   diago_thr_init = 1d-4
   conv_threshold = 1e-8
+  lambda_so(:) = 0.d0
 
     read ( 5, input_toygipaw, iostat = ios )
 
@@ -113,8 +126,10 @@ if (.not. ionode .or. my_image_id > 0) goto 400
   call gipaw_openfil ( )
 
   call gipaw_setup ( )
-  
-  call calc_orbital_magnetization ( )
+
+  call newscf
+
+!  call calc_orbital_magnetization ( )
 
 END PROGRAM toygipaw
 
@@ -144,6 +159,7 @@ SUBROUTINE gipaw_bcast_input
   CALL mp_bcast ( dudk_method, root, world_comm )
   CALL mp_bcast ( diago_thr_init, root, world_comm )
   CALL mp_bcast ( conv_threshold, root, world_comm )
+  CALL mp_bcast ( lambda_so, root, world_comm )
 
 
 END SUBROUTINE gipaw_bcast_input
@@ -171,7 +187,7 @@ SUBROUTINE gipaw_openfil
   ! ... for the direct-access file containing wavefunctions
   ! ... io_level > 0 : open a file; io_level <= 0 : open a buffer
   !
-  nwordwfc = nbnd*npwx*npol
+  nwordwfc =2*nbnd*npwx*npol
   CALL open_buffer( iunwfc, 'wfc', nwordwfc, io_level, exst )
 
 

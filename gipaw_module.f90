@@ -21,6 +21,7 @@ MODULE gipaw_module
 
   INTEGER, PARAMETER:: nbrx=2*(lmaxx+1)**2  ! max number of beta functions
 
+
   ! Physical constants:
   ! fine structure constant alpha (c = 1/alpha)
   REAL(DP), PARAMETER :: alpha = 1.0_dp / 137.03599911_dp

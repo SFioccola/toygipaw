@@ -30,11 +30,16 @@ elf.o \
 fermisurfer_common.o \
 ggen1d.o \
 electrons_gipaw.o \
+set_dvrs.o \
 c_bands_gipaw.o \
 h_psi_gipaw.o \
 gipaw_module.o \
 gipaw_setup.o \
+wfcinit_gipaw.o \
+rotate_wfc_gipaw.o \
+rotate_wfc_k_gipaw.o \
 init_gipaw_1.o \
+init_gipaw_2.o \
 local_dos.o \
 local_dos_mag.o \
 local_dos1d.o \

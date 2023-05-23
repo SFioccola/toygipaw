@@ -6,7 +6,7 @@ SUBROUTINE newscf
   USE io_global, ONLY : stdout
   USE cell_base, ONLY : omega
   USE ions_base, ONLY : nat, tau
-  USE fft_base,  ONLY : dfftp
+  USE fft_base,  ONLY : dfftp, dffts
   USE scf,       ONLY : rho, rho_core
   USE xc_lib,    ONLY : xclib_set_threshold, dmxc
   USE basis, ONLY: starting_wfc, starting_pot, natomwfc
@@ -18,7 +18,7 @@ SUBROUTINE newscf
   USE wvfct, ONLY: nbnd, nbndx
   USE noncollin_module, ONLY: report
   USE check_stop,    ONLY : check_stop_init
-  USE fft_base,      ONLY : dfftp
+  USE fft_base,      ONLY : dfftp, dffts
   USE symm_base,     ONLY : nsym
   USE io_files,      ONLY : iunwfc, prefix, tmp_dir, postfix
   USE ldaU,          ONLY : lda_plus_u
@@ -29,11 +29,15 @@ SUBROUTINE newscf
   USE kinds,         ONLY : dp
   USE input_parameters, ONLY : startingpot, startingwfc, restart_mode
   USE dfunct,        ONLY : newd
+  USE scf,        ONLY: rho, rho_core, v, vltot, vrs, kedtau
+  USE lsda_mod,   ONLY: nspin, current_spin
+  USE orbital_magnetization, ONLY : dvrs
+  USE wvfct,    ONLY : g2kin, nbndx, nbnd
 
   !
   IMPLICIT NONE
   !
-  INTEGER :: i, j
+  INTEGER :: i, j, nrxxs
   CHARACTER(LEN=256) :: dirname
   INTEGER :: iter
   LOGICAL               :: exst
@@ -41,17 +45,17 @@ SUBROUTINE newscf
   REAL(DP), DIMENSION(dfftp%nnr,1) ::  rhotot, sign_r
   REAL(DP) :: exxen
 
-  !  dft='Same as Before'
-!  restart  =.false.
+  !  dft='starting from scratch'
+  restart  =.false.
   io_level = 0
   lscf=.true.
   lda_plus_u=.false.
   doublegrid=.false.
   lmovecell=.false.
   iprint=10000
-!  starting_wfc='file'
-  starting_wfc='atomic'
-  starting_pot='file'
+!  starting_wfc='file' 
+  starting_wfc='atomic' ! Initialization of wfc
+!  starting_pot='file'  
   report=0
   CALL check_stop_init()
   CALL setup_para ( dfftp%nr3, 1, nbnd )
@@ -83,15 +87,17 @@ SUBROUTINE newscf
   call hinit0 ( )
   call potinit ( )
   call newd ( )
-  call wfcinit ( )
+  call wfcinit_gipaw ( )
+  CALL electrons_gipaw ( )
+
+!!! Alternative routine to perform SCF:
 !  call openfil 
 
 !  dirname = TRIM(tmp_dir) //TRIM(prefix) // postfix
 !  CALL extrapolate_charge( dirname, 1 )
 !  CALL hinit1
-  CALL electrons_gipaw ( )
+!  CALL electrons
 !  exxen = 0.d0
-!  call electrons_scf (2, exxen )
   !
   CLOSE(unit=iunwfc, status='keep')
   !

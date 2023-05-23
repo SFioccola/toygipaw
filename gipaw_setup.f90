@@ -9,7 +9,7 @@ SUBROUTINE gipaw_setup
   USE wvfct,         ONLY : nbnd, et, wg
   USE lsda_mod,      ONLY : nspin
   USE scf,           ONLY : v, vrs, vltot, kedtau, rho
-  USE fft_base,      ONLY : dfftp
+  USE fft_base,      ONLY : dfftp, dffts
   USE gvecs,         ONLY : doublegrid
   USE gvect,         ONLY : ecutrho, ngm, g, gg, eigts1, eigts2, eigts3
   USE klist,         ONLY : degauss, ngauss, nks, lgauss, wk, two_fermi_energies, ltetra
@@ -25,19 +25,26 @@ SUBROUTINE gipaw_setup
   USE mp_bands,      ONLY : intra_bgrp_comm
   USE gipaw_module
   USE ions_base, only: tau, ityp
+  USE orbital_magnetization, ONLY: dvrs
 
   implicit none
   integer :: ik, ibnd
   real(dp) :: emin, emax, xmax, small, fac, target
-  
-  write(*,*) 'VEB', iverbosity
   
   ! initialize pseudopotentials
   call init_us_1(nat, ityp, omega, ngm, g, gg, intra_bgrp_comm)
 
 ! setup GIPAW operators
   call gipaw_setup_integrals
-
+  call gipaw_setup_l
+  
+  allocate (dvrs (dffts%nnr, nspin, 3))
+! computes the total local potential (external+scf) on the smooth grid
+  call setlocal
+  call plugin_scf_potential(rho, .false., -1d0)
+  call set_vrs (vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, nspin, doublegrid)
+  CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin )
+  print*, 'dvrs in setup'
 
 END SUBROUTINE gipaw_setup
 
@@ -56,7 +63,7 @@ SUBROUTINE gipaw_setup_integrals
   USE paw_gipaw,     ONLY : paw_recon, paw_nkb, paw_vkb, paw_becp, set_paw_upf
   USE uspp_param,    ONLY : upf
   USE io_global,     ONLY : stdout
-  USE wvfct,         ONLY : nbnd, npwx
+  USE wvfct,         ONLY : nbnd, npwx, nbndx
 
   implicit none
 
@@ -100,6 +107,7 @@ SUBROUTINE gipaw_setup_integrals
     enddo
 
     call init_gipaw_1()
+
 
     ! allocate GIPAW projectors
   allocate ( paw_vkb(npwx,paw_nkb) )
@@ -233,7 +241,7 @@ SUBROUTINE gipaw_setup_integrals
  
         
   ! print integrals
-!  if (iverbosity > 10) then
+  if (iverbosity > 10) then
     write(stdout,'(5X,''GIPAW integrals: -------------------------------------------'')')
     write(stdout,'(5X,''Atom  i/j   nmr_para    nmr_dia     epr_rmc    epr_para     epr_dia'')')
     do nt = 1, ntyp
@@ -257,10 +265,143 @@ SUBROUTINE gipaw_setup_integrals
     enddo
     write(stdout,'(5X,''------------------------------------------------------------'')')
     write(stdout,*)
-!  endif
+  endif
 1000 format(5X,A5,1X,I1,1X,I1,2X,5(E10.4,2x))
 
   
   END SUBROUTINE gipaw_setup_integrals 
+
+!-----------------------------------------------------------------------
+SUBROUTINE gipaw_setup_l
+!-----------------------------------------------------------------------
+  !
+  ! ... Setup the L operator using the properties of the cubic harmonics.
+  ! ... Written by Ari P. Seitsonen and Uwe Gerstman
+  !
+  USE gipaw_module
+  USE kinds,         ONLY : dp
+  USE upf_params,    ONLY : lmaxx
+#ifdef DEBUG_CUBIC_HARMONIC
+  USE io_global,     ONLY : stdout, ionode
+#endif
+
+  implicit none
+  integer :: lm, l, m, lm1, lm2, m1, m2, abs_m1, abs_m2
+  integer :: sign_m1, sign_m2
+  real(dp) :: alpha_lm, beta_lm
+  integer, allocatable :: lm2l(:),lm2m (:)
+#ifdef DEBUG_CUBIC_HARMONIC
+  real(dp) :: mysum1(3,lmaxx+1)
+  real(dp) :: mysum2(3,lmaxx+1)
+#endif
+
+  ! L_x, L_y and L_z
+  allocate ( lx((lmaxx+1)**2,(lmaxx+1)**2) )
+  allocate ( ly((lmaxx+1)**2,(lmaxx+1)**2) )
+  allocate ( lz((lmaxx+1)**2,(lmaxx+1)**2) )
+  allocate ( lm2l((lmaxx+1)**2), lm2m((lmaxx+1)**2) )
+
+  lm = 0
+  do l = 0, lmaxx
+    do m = 0, l
+      lm = lm + 1
+      lm2l ( lm ) = l
+      lm2m ( lm ) = m
+      if ( m /= 0 ) then
+        lm = lm + 1
+        lm2l ( lm ) = l
+        lm2m ( lm ) = - m
+      end if
+    end do
+  end do
+
+  lx = 0.d0
+  ly = 0.d0
+  lz = 0.d0
+  do lm2 = 1, (lmaxx+1)**2
+    do lm1 = 1, (lmaxx+1)**2
+      if ( lm2l ( lm1 ) /= lm2l ( lm2 ) ) cycle
+
+      l = lm2l ( lm1 )
+
+      m1 = lm2m ( lm1 )
+      m2 = lm2m ( lm2 )
+
+      ! L_x, L_y
+      if ( m2 == 0 ) then
+        if ( m1 == -1 ) then
+          lx ( lm1, lm2 ) = - sqrt(real(l*(l+1),dp)) / sqrt(2.0_dp)
+        else if ( m1 == +1 ) then
+          ly ( lm1, lm2 ) = + sqrt(real(l*(l+1),dp)) / sqrt(2.0_dp)
+        end if
+      else if ( m1 == 0 ) then
+        if ( m2 == -1 ) then
+          lx ( lm1, lm2 ) = + sqrt(real(l*(l+1),dp)) / sqrt(2.0_dp)
+        else if ( m2 == +1 ) then
+          ly ( lm1, lm2 ) = - sqrt(real(l*(l+1),dp)) / sqrt(2.0_dp)
+        end if
+      else
+        abs_m1 = abs ( m1 )
+        abs_m2 = abs ( m2 )
+        sign_m1 = sign ( 1, m1 )
+        sign_m2 = sign ( 1, m2 )
+        alpha_lm = sqrt(real(l*(l+1)-abs_m2*(abs_m2+1),dp))
+        beta_lm  = sqrt(real(l*(l+1)-abs_m2*(abs_m2-1),dp))
+        if ( abs_m1 == abs_m2 + 1 ) then
+          lx ( lm1, lm2 ) =-( sign_m2 - sign_m1 ) * alpha_lm / 4.0_dp
+          ly ( lm1, lm2 ) = ( sign_m2 + sign_m1 ) * alpha_lm / 4.0_dp / sign_m2
+        else if ( abs_m1 == abs_m2 - 1 ) then
+          lx ( lm1, lm2 ) =-( sign_m2 - sign_m1 ) * beta_lm / 4.0_dp
+          ly ( lm1, lm2 ) =-( sign_m2 + sign_m1 ) * beta_lm / 4.0_dp / sign_m2
+        end if
+      end if
+
+      ! L_z
+      if ( m1 == - m2 ) then
+        lz ( lm1, lm2 ) = - m2
+      end if
+
+    end do
+ end do
+
+#ifdef DEBUG_CUBIC_HARMONICS
+  write(stdout,'(A)') "lx:"
+  write(stdout,'(9F8.5)') lx
+
+  write(stdout,'(A)') "ly:"
+  write(stdout,'(9F8.5)') ly
+
+  write(stdout,'(A)') "lz:"
+  write(stdout,'(9F8.5)') lz
+
+  ! checks
+  mysum1 = 0
+  mysum2 = 0
+  do lm2 = 1, (lmaxx+1)**2
+    do lm1 = 1, (lmaxx+1)**2
+      if ( lm2l ( lm1 ) /= lm2l ( lm2 ) ) cycle
+      l = lm2l ( lm2 )
+      mysum1(1,l+1) = mysum1(1,l+1) + lx(lm1,lm2)
+      mysum2(1,l+1) = mysum2(1,l+1) + lx(lm1,lm2)**2
+      mysum1(2,l+1) = mysum1(2,l+1) + ly(lm1,lm2)
+      mysum2(2,l+1) = mysum2(2,l+1) + ly(lm1,lm2)**2
+      mysum1(3,l+1) = mysum1(3,l+1) + lz(lm1,lm2)
+      mysum2(3,l+1) = mysum2(3,l+1) + lz(lm1,lm2)**2
+    end do
+  end do
+  write(stdout,'(A,9F8.4)') "Debug, sum1: x = ", mysum1(1,:)
+  write(stdout,'(A,9F8.4)') "Debug, sum1: y = ", mysum1(2,:)
+  write(stdout,'(A,9F8.4)') "Debug, sum1: z = ", mysum1(3,:)
+  write(stdout,'(A,9F8.4)') "Debug, sum2: x = ", mysum2(1,:)
+  write(stdout,'(A,9F8.4)') "Debug, sum2: y = ", mysum2(2,:)
+  write(stdout,'(A,9F8.4)') "Debug, sum2: z = ", mysum2(3,:)
+#endif
+
+ deallocate ( lm2l, lm2m )
+
+END SUBROUTINE gipaw_setup_l
+
+
+
 
 

@@ -109,6 +109,7 @@ SUBROUTINE c_bands_gipaw ( iter )
      !
      IF ( lsda ) current_spin = isk(ik)
      !
+     print*, 'chiama g2_kin'
      CALL g2_kin( ik )
      !
      ! ... More stuff needed by the hamiltonian: nonlocal projectors
@@ -249,7 +250,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
   REAL(KIND=DP) :: cg_iter, ppcg_iter, rmm_iter
   ! (weighted) number of iterations in Conjugate-Gradient
   ! (weighted) number of iterations in RMM-DIIS
-  INTEGER :: npw, ig, dav_iter, ntry, notconv, nhpsi
+  INTEGER :: npw, ig, dav_iter, ntry, notconv, nhpsi, m
   ! number of iterations in Davidson
   ! number or repeated call to diagonalization in case of non convergence
   ! number of notconverged elements
@@ -297,6 +298,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
   external g_1psi_gpu
   ALLOCATE( h_diag( npwx, npol ), STAT=ierr )
   print*, 'chiama diag_bands_gipaw'
+  m = nbnd
   IF( ierr /= 0 ) &
      CALL errore( ' diag_bands ', ' cannot allocate h_diag ', ABS(ierr) )
   !
@@ -391,8 +393,9 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
              IF ( .NOT. lrot ) THEN
                 !
                 IF (.not. use_gpu) THEN
+                        print*,'entra da c_bands1'
                    CALL using_evc(1);  CALL using_et(1); ! et is used as intent(out), set intento=2?
-                   CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
+                   CALL rotate_wfc_gipaw ( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
                    CALL using_evc_d(1);  CALL using_et_d(1); ! et is used as intent(out), set intento=2?
                    CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc_d, npol, okvan, evc_d, et_d(1,ik) )
@@ -698,8 +701,9 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
     ! --- Define a small number ---
     INTEGER :: j
     !
+    m = nbnd 
     !write (*,*) ' enter diag_bands_k'; FLUSH(6)
-!    print*, 'diag_bands_k_gipaw'
+    print*, 'diag_bands_k_gipaw'
     IF ( lelfield ) THEN
        !
        ! ... save wave functions from previous iteration for electric field
@@ -768,8 +772,9 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
              IF ( .NOT. lrot ) THEN
                 !
                 IF ( .not. use_gpu ) THEN
+                        print*,'entra da c_bands2'
                    CALL using_evc(1); CALL using_et(1);
-                   CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
+                   CALL rotate_wfc_gipaw ( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
                    CALL using_evc_d(1); CALL using_et_d(1);
                    CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc_d, npol, okvan, evc_d, et_d(1,ik) )
@@ -982,6 +987,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
        ! ... hamiltonian used in g_psi to evaluate the correction
        ! ... to the trial eigenvectors
        !
+       print*, 'inizia qui la Davidson'
        IF ( .not. use_gpu ) THEN
           !
           CALL using_h_diag(2);
@@ -1033,9 +1039,11 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
                 !
              ELSE
                 !
+                print*, 'chiama la sub cegterg'
                 CALL cegterg ( h_psi_gipaw, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+                print*, 'si blocca qui'
              END IF
           ELSE
              CALL using_evc_d(1) ; CALL using_et_d(1) 

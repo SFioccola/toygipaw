@@ -30,12 +30,15 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   USE lsda_mod, ONLY : current_spin
   USE scf,      ONLY : vrs
   USE orbital_magnetization,      ONLY : dvrs
-  USE gvect,    ONLY : gstart
+  USE gvect,    ONLY : gstart, ngm
+  USE gvecs,    ONLY : ngms
+  USE gipaw_module,  ONLY : lambda_so
 #ifdef EXX
   USE exx,      ONLY : vexx
   USE funct,    ONLY : exx_is_active
+  USE realus,   ONLY: real_space
+  USE wvfct,    ONLY : g2kin, nbndx, nbnd
 #endif
-!  USE funct,    ONLY : dft_is_meta ! hybrid metaGGA not implemented yet
 
   !
   IMPLICIT NONE
@@ -46,11 +49,7 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   COMPLEX(DP) :: psi(lda,m) 
   COMPLEX(DP) :: hpsi(lda,m)
   integer     :: nr1s, nr2s, nr3s, nrx1s, nrx2s, nrx3s,nrxxs
-  integer, allocatable     :: nls(:)
-  allocate(nls(size(dffts%nl)))  
-  !
-  !
-  print*, 'chiama h_psi_gipaw'
+
   ! various initializations:
   nrxxs = dffts%nnr
   nr1s=dffts%nr1
@@ -59,7 +58,7 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   nrx1s=dffts%nr1x
   nrx2s=dffts%nr2x
   nrx3s=dffts%nr3x
-  nls = dffts%nl
+  !
   CALL start_clock( 'h_psi' )
   !  
   CALL h_psi_k( )
@@ -69,46 +68,29 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   RETURN
   !
   CONTAINS
-!     !-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
      SUBROUTINE h_psi_k( )
-       !-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
        !
        ! ... k-points version
        !
        USE wavefunctions,        ONLY : psic
-       USE becmod,               ONLY : becp
-       !<ceres>
        USE gipaw_module,         ONLY : lambda_so
-!       USE nmr_mod,              ONLY : m_0, add_nmr_valence, add_nmr_Fnl
        USE wvfct,                ONLY : current_k
-!       USE gipaw_module,         ONLY : add_so_Fnl, add_so_valence
        USE klist,                ONLY : nelup, neldw
-!       USE fixed_occ,            ONLY : roks, nrestricted 
        USE fft_interfaces,       ONLY : invfft, fwfft
-       !</ceres>
+       USE becmod,                  ONLY: bec_type, becp, calbec
+       USE orbital_magnetization,  ONLY : dvrs
+       USE wvfct,    ONLY : g2kin, nbndx, nbnd
+
        !
        IMPLICIT NONE
        !
        INTEGER :: ibnd, j, ik
-       !<ceres> for the valence spin-orbit
        complex(dp), allocatable, dimension(:,:) :: p_psic
-       !</ceres>
-       ! counters
-       !
        !
        ik = current_k
-       print*, 'chiama h_psi_k'
        CALL start_clock( 'init' )
-       !<ceres>
-       if (current_k <= 0) call errore('h_psi_k', 'current_k??', 1)
-       if (current_spin == 0) call errore('h_psi_k', 'current_spin??', 1)
-       if (any(lambda_so /= 0.d0)) then 
-               allocate( p_psic(1:nrxxs,3) )
-       endif
-
-!       if (any(lambda_so /= 0.d0) .or. any(m_0 /= 0.d0)) &
-!         allocate( p_psic(1:nrxxs,3) )
-       !</ceres>
        !
        ! ... Here we apply the kinetic energy (k+G)^2 psi
        !
@@ -118,90 +100,349 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
           !
        END DO
        !
-       CALL stop_clock( 'init' )
-        
-!       if (dft_is_meta()) call h_psi_meta (lda, n, m, psi, hpsi)
-       !
-       ! ... Here we add the Hubbard potential times psi
-       !
-!       IF ( lda_plus_u ) CALL vhpsi( lda, n, m, psi, hpsi )
-       !
-       ! ... the local potential V_Loc psi. First the psi in real space
-       !
-       DO ibnd = 1, m
-          !
-          CALL start_clock( 'firstfft' )
-          !
-          psic(1:nrxxs) = ( 0.D0, 0.D0 )
-          !
-          psic(nls(igk_k(1:n,ik))) = psi(1:n,ibnd)
-          !
-          CALL invfft('Wave', psic, dffts)
-          !
-          CALL stop_clock( 'firstfft' )
-          !
-          ! ... product with the potential vrs = (vltot+vr) on the smooth grid
-          !
-          !<ceres>
-!          if (any(m_0 /= 0.d0)) then
-!            call add_nmr_valence(current_k, n, psi(1:n,ibnd), p_psic)
-!          else
-!            if (roks .and. ibnd <= nrestricted) then
-!              psic(1:nrxxs) = psic(1:nrxxs) * 0.5*(vrs(1:nrxxs,1)+vrs(1:nrxxs,2))
-!            else
-              psic(1:nrxxs) = psic(1:nrxxs) * vrs(1:nrxxs,current_spin)
-!            endif
-!          endif
+  ! new part from h_psi PW
+       CALL vloc_psi_k_gipaw( lda, n, m, psi, vrs(1,current_spin), hpsi )
 
-!          if (any(lambda_so /= 0.d0)) then
-!                  print*, psi(1,1), 'psi'
-            !    important
-!            call add_so_valence(current_k, n, 1.d0, psi(1:n,ibnd), p_psic)
-            !
-!          endif
-          !</ceres>
+  ! ... Here the product with the non local potential V_NL psi
+  ! ... (not in the real-space case: it is done together with V_loc)
+  !
+  IF ( nkb > 0) THEN
+     !
+     CALL start_clock( 'h_psi:calbec' )
+     CALL calbec( n, vkb, psi, becp, m )
+     CALL stop_clock( 'h_psi:calbec' )
+     CALL add_vuspsi( lda, n, m, hpsi )
+     !
+  ENDIF
+  ! ... Add the paramagnetic term to the Hamiltonian
+  if (any(lambda_so /= 0.d0)) then
+          call add_so_Fnl (lda, n, m, 1.d0, psi, hpsi)
+  endif
 
-          !
-          ! ... back to reciprocal space
-          !
-          CALL start_clock( 'secondfft' )
-          !
-!          CALL cft3s( psic, nr1s, nr2s, nr3s, nrx1s, nrx2s, nrx3s, -2 )
-          CALL fwfft('Wave', psic, dffts)
-          !
-          ! ... addition to the total product
-          !
-!          hpsi(1:n,ibnd) = hpsi(1:n,ibnd) + psic(nls(igk_k(1:n)))
-          !
-!          CALL stop_clock( 'secondfft' )
-          !
-       END DO
-       !
-       ! ... Here the product with the non local potential V_NL psi
-       !
-       IF ( nkb > 0 ) THEN
-          !
-          CALL ccalbec( nkb, lda, n, m, becp, vkb, psi )
-          !
-!          CALL add_vuspsi( lda, n, m, psi, hpsi )
-          !
-       END IF
-       !
-!#ifdef EXX
-!       IF ( exx_is_active() ) CALL vexx( lda, n, m, psi, hpsi )
-!#endif
 
-!       if (any(lambda_so /= 0.d0) .or. any(m_0 /= 0.d0)) then
-!          deallocate( p_psic )
-!          if (any(lambda_so /= 0.d0)) &
-!            call add_so_Fnl (lda, n, m, 1.d0, psi, hpsi)
-!          if (any(m_0 /= 0.d0)) &
-!            call add_nmr_Fnl (lda, n, m, psi, hpsi)
-!       endif
-       !
-!       RETURN
-       !
+       
      END SUBROUTINE h_psi_k     
      !
-END SUBROUTINE h_psi_gipaw
+!-----------------------------------------------------------------------
+SUBROUTINE vloc_psi_k_gipaw( lda, n, m, psi, v, hpsi )
+  !-----------------------------------------------------------------------
+  !! Calculation of Vloc*psi using dual-space technique - k-points:
+  !
+  !! * fft to real space;
+  !! * product with the potential v on the smooth grid;
+  !! * back to reciprocal space;
+  !! * addition to the hpsi.
+  !
+  USE parallel_include
+  USE kinds,                  ONLY : DP
+  USE wvfct,                  ONLY : current_k
+  USE klist,                  ONLY : igk_k
+  USE mp_bands,               ONLY : me_bgrp
+  USE fft_base,               ONLY : dffts
+  USE fft_wave
+  USE fft_helper_subroutines, ONLY : fftx_ntgrp, tg_get_nnr, tg_get_group_nr3
+  USE wavefunctions,          ONLY : psic
+  USE gipaw_module,           ONLY : lambda_so
+  USE orbital_magnetization  
+  !
+  IMPLICIT NONE
+  !
+  INTEGER, INTENT(IN) :: lda
+  !! leading dimension of arrays psi, hpsi
+  INTEGER, INTENT(IN) :: n
+  !! true dimension of psi, hpsi
+  INTEGER, INTENT(IN) :: m
+  !! number of states psi
+  COMPLEX(DP), INTENT(IN) :: psi(lda,m)
+  !! the wavefunction
+  COMPLEX(DP), INTENT(INOUT) :: hpsi(lda,m)
+  !! Hamiltonian dot psi
+  REAL(DP), INTENT(IN) :: v(dffts%nnr)
+  !! the total pot. in real space (smooth grid) for current spin
 
+  INTEGER :: ibnd, j, incr
+  INTEGER :: i, iin, right_nnr, right_nr3, right_inc
+  COMPLEX(DP), ALLOCATABLE :: vpsi(:,:)
+  ! ... chunking parameters
+  INTEGER, PARAMETER :: blocksize = 256
+  INTEGER :: numblock
+  ! ... Task Groups
+  LOGICAL :: use_tg
+  REAL(DP), ALLOCATABLE :: tg_v(:)
+  COMPLEX(DP), ALLOCATABLE :: tg_psic(:), tg_vpsi(:,:), p_psic(:,:)
+  INTEGER :: idx, brange, dffts_nnr
+  !
+  print*, 'chiama vloc_psi_k_gipaw'
+  CALL start_clock( 'vloc_psi' )
+  use_tg = dffts%has_task_groups
+  !
+  IF( use_tg ) THEN
+     CALL start_clock( 'vloc_psi:tg_gather' )
+     dffts_nnr = dffts%nnr_tg
+     incr = fftx_ntgrp(dffts)
+     ALLOCATE( tg_v(dffts_nnr) )
+     ALLOCATE( tg_psic(dffts_nnr), tg_vpsi(lda,incr) )
+     CALL tg_gather( dffts, v, tg_v )
+     CALL stop_clock( 'vloc_psi:tg_gather' )
+  ELSE
+     dffts_nnr = dffts%nnr
+     ALLOCATE( vpsi(lda,1) )
+  ENDIF
+  !
+  IF ( use_tg ) THEN
+     !
+     CALL tg_get_nnr( dffts, right_nnr )
+     !
+     ! ... compute the number of chuncks
+     numblock = (n+blocksize-1)/blocksize
+     !
+     DO ibnd = 1, m, fftx_ntgrp(dffts)
+             !
+        CALL tgwave_g2r( psi(:,ibnd:m), tg_psic, dffts, n, igk_k(:,current_k) )
+        !
+!        write (6,*) 'wfc R '
+!        write (6,99) (tg_psic(i), i=1,400)
+        !
+        CALL tg_get_group_nr3( dffts, right_nr3 )
+        !
+        !$omp parallel do
+        DO j = 1, dffts%nr1x*dffts%nr2x*right_nr3
+           tg_psic(j) = tg_psic(j) * tg_v(j)
+        ENDDO
+        !$omp end parallel do
+        !
+!        write (6,*) 'v psi R '
+!        write (6,99) (tg_psic(i), i=1,400)
+        !
+        brange = m-ibnd+1
+        !
+        CALL tgwave_r2g( tg_psic, tg_vpsi(:,1:brange), dffts, n, igk_k(:,current_k) )
+        !
+        !$omp parallel do collapse(2)
+        DO idx = 0, MIN(fftx_ntgrp(dffts)-1, m-ibnd)
+           DO j = 1, numblock
+              DO iin = (j-1)*blocksize+1, MIN(j*blocksize,n)
+                 hpsi(iin,ibnd+idx) = hpsi(iin,ibnd+idx) + tg_vpsi(iin,idx+1)
+              ENDDO
+           ENDDO
+        ENDDO
+        !$omp end parallel do
+        !
+     ENDDO
+     !
+  ELSE
+     !
+       if (current_k <= 0) call errore('h_psi_k', 'current_k??', 1)
+       if (current_spin == 0) call errore('h_psi_k', 'current_spin??', 1)
+       if (any(lambda_so /= 0.d0)) allocate( p_psic(1:dffts%nnr,3) ) 
+     !
+     DO ibnd = 1, m
+        !
+        CALL wave_g2r( psi(1:n,ibnd:ibnd), psic, dffts, igk=igk_k(:,current_k) )
+        !
+        !        write (6,*) 'wfc R '
+!        write (6,99) (psic(i), i=1,400)
+        !
+        !$omp parallel do
+        DO j = 1, dffts_nnr
+           psic(j) = psic(j) * v(j)
+        ENDDO
+        !$omp end parallel do
+        !
+!        write (6,*) 'v psi R '
+!        write(6,*) (psic(i), i=1,400i)
+        !
+        CALL wave_r2g( psic(1:dffts_nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k) )
+        !
+        ! Add the SO term to the Hamiltonian
+        if (any(lambda_so /= 0.d0)) then
+            call add_so_valence(current_k, n, 1.d0, psi(1:n,ibnd), p_psic)
+        endif
+        !
+        !
+        !$omp parallel do
+        DO i = 1, n
+           hpsi(i,ibnd) = hpsi(i,ibnd) + vpsi(i,1)
+        ENDDO
+        !$omp end parallel do
+        !
+!        write (6,*) 'v psi G ', ibnd
+!        write (6,99) (psic(i), i=1,400)
+     ENDDO
+!
+  ENDIF
+  !
+  if (any(lambda_so /= 0.d0)) then
+          deallocate( p_psic )
+  endif
+  !
+  IF ( use_tg ) THEN
+     DEALLOCATE( tg_psic, tg_vpsi )
+     DEALLOCATE( tg_v )
+  ELSE
+     DEALLOCATE( vpsi )
+  ENDIF
+  !
+  CALL stop_clock( 'vloc_psi' )
+  !
+99 format ( 20 ('(',2f12.9,')') )
+  !
+  RETURN
+  !
+END SUBROUTINE vloc_psi_k_gipaw
+
+!---------------------------------------------------------------
+ ! add the SO valence term
+!---------------------------------------------------------------
+  SUBROUTINE add_so_valence(ik, n, alpha, psi, p_psic)
+  USE wavefunctions,          ONLY : psic
+  USE wvfct,                ONLY : current_k
+  USE gvect,                ONLY :  ngm, g
+  USE cell_base,            ONLY : tpiba
+  USE lsda_mod,             ONLY : current_spin
+  USE klist,                ONLY : xk
+  USE klist,                  ONLY : igk_k
+  USE fft_base,             ONLY : dffts, dfftp, dfftb
+  USE fft_interfaces,       ONLY : invfft, fwfft
+  USE orbital_magnetization, ONLY : a2gp8
+  IMPLICIT NONE
+  integer :: ik, n, ipol, ig, i, nrxxs_l
+  complex(dp) :: p_psic(dffts%nnr,3)
+  complex(dp) :: psi(n)
+  real(dp) :: gk, sigma, alpha
+  ! index for the cross product
+  integer :: ind(2,3), ii, jj
+  ind(:,1) = (/ 2, 3 /)
+  ind(:,2) = (/ 3, 1 /)
+  ind(:,3) = (/ 1, 2 /)
+  print*, 'chiama so valence'
+
+  !!RETURN
+  ! compute (p+k)|psi> in real space
+  p_psic(1:dffts%nnr,1:3) = (0.d0,0.d0)
+  ik = current_k
+  nrxxs_l = dffts%nnr
+  do ipol = 1, 3
+    do ig = 1, n
+      gk = xk(ipol,ik) + g(ipol,igk_k(ig,ik))
+      p_psic(dffts%nl(igk_k(ig,ik)),ipol) = -gk * tpiba * psi(ig)
+    enddo
+     CALL invfft ('Wave' , p_psic(:,ipol), dffts)
+  enddo
+   
+  ! compute lambda_so ( sigma \cdot dvrs \times p_psi)
+  sigma = 1.d0; if (current_spin == 2) sigma = -1.d0
+  do ipol = 1, 3
+    if (lambda_so(ipol) == 0.d0) cycle
+    ii = ind(1,ipol)
+    jj = ind(2,ipol)
+    do i = 1, nrxxs_l
+        psic(i) = psic(i) + alpha * lambda_so(ipol) * a2gp8 * sigma * ( &
+        dvrs(i,current_spin,ii)*p_psic(i,jj) - &
+        dvrs(i,current_spin,jj)*p_psic(i,ii) )
+    enddo
+  enddo
+  END SUBROUTINE add_so_valence
+
+!---------------------------------------------------------------
+! add the F_R^{NL} term of the SO reconstruction
+!---------------------------------------------------------------
+  SUBROUTINE add_so_Fnl(lda, n, m, alpha, psi, hpsi)
+  USE kinds,      ONLY : DP
+  USE ions_base,  ONLY : nat, ntyp => nsp, ityp
+  USE lsda_mod,   ONLY : current_spin
+  USE paw_gipaw,       ONLY : paw_vkb, paw_nkb, paw_recon, paw_lmaxkb, paw_becp
+  USE wvfct,           ONLY : current_k
+  USE klist,           ONLY : xk, igk_k
+  USE fft_base, ONLY : dffts, dfftp, dfftb
+  USE wvfct,    ONLY : g2kin, nbndx, nbnd
+  USE becmod,          ONLY: bec_type, becp, calbec
+  USE orbital_magnetization, ONLY : a2gp8
+  USE gipaw_module,  ONLY : radial_integral_paramagnetic_so
+  USE gipaw_module,  ONLY : lx, ly, lz
+  USE gipaw_module,  ONLY : lambda_so
+  IMPLICIT NONE
+  INTEGER :: lda, n, m
+  INTEGER :: ibnd, ijkb0, nt, na, ikb, jkb, ih, jh
+  INTEGER :: l1, m1, lm1, l2, m2, lm2, nbs1, nbs2
+  integer :: nr1s, nr2s, nr3s, nrx1s, nrx2s, nrx3s,nrxxs
+  COMPLEX(DP), ALLOCATABLE :: ps (:,:), paw_becp4 (:,:)
+  COMPLEX(DP) :: psi(lda,n), hpsi(lda,n)
+  real(dp) :: sigma, alpha
+
+  print*, 'chiama FrNL'
+
+  nrxxs = dffts%nnr
+  nr1s=dffts%nr1
+  nr2s=dffts%nr2
+  nr3s=dffts%nr3
+  nrx1s=dffts%nr1x
+  nrx2s=dffts%nr2x
+  nrx3s=dffts%nr3x
+
+!  print *, 'nbnd, m in Fnlr', paw_nkb, nbnd, m
+  if (m > nbndx) call errore('add_so_Fnl', 'm > nbndx ???', m)
+!  !!if (m > nbnd) call errore('add_so_Fnl', 'm > nbnd ???', m)
+  ALLOCATE (ps(paw_nkb,m))
+  allocate (paw_becp4(paw_nkb,m))
+  ps(:,:) = (0.D0, 0.D0)
+  paw_becp4 = (0d0, 0d0)
+
+  call init_gipaw_2(n, igk_k(1:n,current_k), xk(1,current_k), paw_vkb)
+  CALL calbec( n, paw_vkb, psi, paw_becp4, m )
+  sigma = 1.d0; if (current_spin == 2) sigma = -1.d0
+
+ ijkb0 = 0
+  do nt = 1, ntyp
+    do na = 1, nat
+      if (ityp(na) .eq. nt) then
+        do ih = 1, paw_recon(nt)%paw_nh
+          ikb = ijkb0 + ih
+          nbs1 = paw_recon(nt)%paw_indv(ih)
+          l1 = paw_recon(nt)%paw_nhtol(ih)
+          m1 = paw_recon(nt)%paw_nhtom(ih)
+          lm1 = m1 + l1**2
+         
+          do jh = 1, paw_recon(nt)%paw_nh
+            jkb = ijkb0 + jh
+            nbs2 = paw_recon(nt)%paw_indv(jh)
+            l2 = paw_recon(nt)%paw_nhtol(jh)
+            m2 = paw_recon(nt)%paw_nhtom(jh)
+            lm2 = m2 + l2**2
+
+            if (l1 /= l2) cycle
+            if (l1 == 0) cycle
+
+            do ibnd = 1, m
+              ps(ikb,ibnd) = ps(ikb,ibnd) + lambda_so(1) * a2gp8 * &
+                sigma * lx(lm1,lm2) * &
+                radial_integral_paramagnetic_so(nbs1,nbs2,nt) * &
+                paw_becp4(jkb,ibnd)
+            
+             ps(ikb,ibnd) = ps(ikb,ibnd) + lambda_so(2) * a2gp8 * &
+                sigma * ly(lm1,lm2) * &
+                radial_integral_paramagnetic_so(nbs1,nbs2,nt) * &
+                paw_becp4(jkb,ibnd)
+
+              ps(ikb,ibnd) = ps(ikb,ibnd) + lambda_so(3) * a2gp8 * &
+                sigma * lz(lm1,lm2) * &
+                radial_integral_paramagnetic_so(nbs1,nbs2,nt) * &
+                paw_becp4(jkb,ibnd)
+            enddo   ! ibnd
+          enddo   ! jh
+        enddo   ! ih
+        ijkb0 = ijkb0 + paw_recon(nt)%paw_nh
+      endif    ! ityp(na) .eq. nt
+    enddo   ! na
+  enddo   ! nt
+  ps = ps * alpha
+
+  CALL ZGEMM( 'N', 'N', n, m, paw_nkb, ( 0.D0, 1.0D0 ) , paw_vkb, &
+              lda, ps, paw_nkb, ( 1.D0, 0.D0 ) , hpsi, lda )
+
+  deallocate (ps)
+  deallocate (paw_becp4)
+  END SUBROUTINE add_so_Fnl
+
+
+END SUBROUTINE h_psi_gipaw

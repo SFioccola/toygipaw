@@ -24,7 +24,7 @@ PROGRAM toygipaw
   USE ldaU, ONLY : lda_plus_u
   USE scf,   ONLY : rho, rho_core, rhog_core, v, vrs!FZ: test spinors added vrs 
   USE fft_rho,  ONLY : rho_g2r  
-  USE fft_base,  ONLY : dfftp    
+  USE fft_base,  ONLY : dfftp, dffts    
   USE noncollin_module,   ONLY : noncolin, npol, m_loc, ux, angle1, angle2  !FZ: test for spinors
   USE ions_base,          ONLY : nat, tau, ntyp => nsp, ityp, zv  !FZ: test for spinors
   USE control_flags, ONLY : restart, io_level, lscf, iprint, &
@@ -39,6 +39,7 @@ PROGRAM toygipaw
   USE basis, ONLY: starting_wfc
   USE buffers,          ONLY : open_buffer, close_buffer, save_buffer
   USE dfunct,             ONLY : newd
+  USE orbital_magnetization, ONLY : dvrs
 
   IMPLICIT NONE
 
@@ -54,7 +55,6 @@ PROGRAM toygipaw
                         verbosity, q_gipaw, dudk_method, &
                         diago_thr_init, conv_threshold, &
                         lambda_so
-
 
 ! begin with the initialization part                
 #if defined(__MPI)

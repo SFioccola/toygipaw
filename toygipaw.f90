@@ -129,7 +129,7 @@ if (.not. ionode .or. my_image_id > 0) goto 400
 
   call newscf
 
-!  call calc_orbital_magnetization ( )
+  call calc_orbital_magnetization ( )
 
 END PROGRAM toygipaw
 
@@ -187,7 +187,8 @@ SUBROUTINE gipaw_openfil
   ! ... for the direct-access file containing wavefunctions
   ! ... io_level > 0 : open a file; io_level <= 0 : open a buffer
   !
-  nwordwfc =2*nbnd*npwx*npol
+  nwordwfc =nbnd*npwx*npol
+!  nwordwfc =2*nbnd*npwx*npol
   CALL open_buffer( iunwfc, 'wfc', nwordwfc, io_level, exst )
 
 

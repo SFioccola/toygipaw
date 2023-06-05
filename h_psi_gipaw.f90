@@ -23,7 +23,6 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   !
   USE kinds,    ONLY : DP
   USE uspp,     ONLY : vkb, nkb
-  USE wvfct,    ONLY : g2kin
   USE klist,    ONLY : igk_k
   USE fft_base, ONLY : dffts, dfftp, dfftb
 !  USE ldaU,     ONLY : lda_plus_u
@@ -172,7 +171,7 @@ SUBROUTINE vloc_psi_k_gipaw( lda, n, m, psi, v, hpsi )
   COMPLEX(DP), ALLOCATABLE :: tg_psic(:), tg_vpsi(:,:), p_psic(:,:)
   INTEGER :: idx, brange, dffts_nnr
   !
-  print*, 'chiama vloc_psi_k_gipaw'
+!  print*, 'chiama vloc_psi_k_gipaw'
   CALL start_clock( 'vloc_psi' )
   use_tg = dffts%has_task_groups
   !
@@ -252,12 +251,17 @@ SUBROUTINE vloc_psi_k_gipaw( lda, n, m, psi, v, hpsi )
 !        write (6,*) 'v psi R '
 !        write(6,*) (psic(i), i=1,400i)
         !
-        CALL wave_r2g( psic(1:dffts_nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k) )
-        !
         ! Add the SO term to the Hamiltonian
         if (any(lambda_so /= 0.d0)) then
             call add_so_valence(current_k, n, 1.d0, psi(1:n,ibnd), p_psic)
         endif
+        !
+        CALL wave_r2g( psic(1:dffts_nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k) )
+        !
+        ! Add the SO term to the Hamiltonian
+     !   if (any(lambda_so /= 0.d0)) then
+     !       call add_so_valence(current_k, n, 1.d0, psi(1:n,ibnd), p_psic)
+     !   endif
         !
         !
         !$omp parallel do
@@ -269,7 +273,6 @@ SUBROUTINE vloc_psi_k_gipaw( lda, n, m, psi, v, hpsi )
 !        write (6,*) 'v psi G ', ibnd
 !        write (6,99) (psic(i), i=1,400)
      ENDDO
-!
   ENDIF
   !
   if (any(lambda_so /= 0.d0)) then
@@ -315,7 +318,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   ind(:,1) = (/ 2, 3 /)
   ind(:,2) = (/ 3, 1 /)
   ind(:,3) = (/ 1, 2 /)
-  print*, 'chiama so valence'
+!  print*, 'chiama so valence'
 
   !!RETURN
   ! compute (p+k)|psi> in real space
@@ -370,7 +373,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   COMPLEX(DP) :: psi(lda,n), hpsi(lda,n)
   real(dp) :: sigma, alpha
 
-  print*, 'chiama FrNL'
+!  print*, 'chiama FrNL'
 
   nrxxs = dffts%nnr
   nr1s=dffts%nr1
@@ -388,7 +391,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   ps(:,:) = (0.D0, 0.D0)
   paw_becp4 = (0d0, 0d0)
 
-  call init_gipaw_2(n, igk_k(1:n,current_k), xk(1,current_k), paw_vkb)
+  call init_gipaw_2(n, igk_k(1,current_k), xk(1,current_k), paw_vkb)
   CALL calbec( n, paw_vkb, psi, paw_becp4, m )
   sigma = 1.d0; if (current_spin == 2) sigma = -1.d0
 

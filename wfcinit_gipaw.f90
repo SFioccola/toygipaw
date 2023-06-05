@@ -45,7 +45,7 @@ SUBROUTINE wfcinit_gipaw()
   CHARACTER (LEN=256)  :: dirname
   TYPE ( output_type ) :: output_obj
   !
-  print*, 'chiama wfcinit_gipaw'
+!  print*, 'chiama wfcinit_gipaw'
   CALL start_clock( 'wfcinit' )
   CALL using_evc(0) ! this may be removed
   !
@@ -436,7 +436,7 @@ SUBROUTINE init_wfc_gipaw ( ik )
     CALL rotate_wfc_gpu ( npwx, ngk_ik, n_starting_wfc, gstart, nbnd, wfcatom, npol, okvan, evc_d, etatom )
     !$acc end host_data
   ELSE
-          print*, 'ENTRA QUI'
+!          print*, 'ENTRA QUI'
     CALL rotate_wfc_gipaw ( npwx, ngk(ik), n_starting_wfc, gstart, nbnd, wfcatom, npol, okvan, evc, etatom )
     CALL using_evc(1)  ! rotate_wfc (..., evc, etatom) -> evc : out (not specified)
   END IF

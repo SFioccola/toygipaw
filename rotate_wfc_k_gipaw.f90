@@ -51,7 +51,7 @@ SUBROUTINE rotate_wfc_k_gipaw ( h_psi_gipaw, s_psi, overlap, &
     ! s_psi(npwx,npw,nvec,spsi)
     !     calculates S|psi> (if needed)
     !     Vectors psi,hpsi,spsi are dimensioned (npwx,npol,nvec)
-  print*,'chiama rotate_wfc_k_gipaw'
+!  print*,'chiama rotate_wfc_k_gipaw'
   IF ( npol == 1 ) THEN
      !
      kdim = npw

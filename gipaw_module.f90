@@ -122,7 +122,6 @@ MODULE gipaw_module
 #ifdef __BANDS
   INTEGER :: ibnd_start, ibnd_end
 #endif
-
 !-----------------------------------------------------------------------
 END MODULE gipaw_module
 !-----------------------------------------------------------------------

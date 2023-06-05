@@ -53,9 +53,9 @@ SUBROUTINE newscf
   doublegrid=.false.
   lmovecell=.false.
   iprint=10000
-!  starting_wfc='file' 
+!  starting_wfc='file'  ! read wfc from preav. scf
+!  starting_pot='file'  ! read potential from preav scf
   starting_wfc='atomic' ! Initialization of wfc
-!  starting_pot='file'  
   report=0
   CALL check_stop_init()
   CALL setup_para ( dfftp%nr3, 1, nbnd )
@@ -73,13 +73,12 @@ SUBROUTINE newscf
   !
   david = 4
   nbndx = max (nbndx, david*nbnd)
-  max_cg_iter=20
   isolve=0
-  tr2 =1.d-8
-  ethr=1.d-8
-  mixing_beta=0.7d0
-  nmix=4
-  niter=50
+  tr2 =1.d-14
+  ethr=2.d-6
+  mixing_beta=0.2d0
+  nmix=8
+  niter=100
   nexxiter=100
   !
   iunwfc  = 9 ! change the number of unit iunwfc

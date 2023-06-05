@@ -59,7 +59,7 @@ SUBROUTINE c_bands_gipaw ( iter )
   CALL start_clock( 'c_bands' ); !write (*,*) 'start c_bands' ; FLUSH(6)
   CALL using_evc(0)
   !
-  print*, 'chiama c_bands_gipaw'
+!  print*, 'chiama c_bands_gipaw'
   ik_ = 0
   avg_iter = 0.D0
   IF ( restart ) CALL using_et(1)
@@ -109,7 +109,7 @@ SUBROUTINE c_bands_gipaw ( iter )
      !
      IF ( lsda ) current_spin = isk(ik)
      !
-     print*, 'chiama g2_kin'
+!     print*, 'chiama g2_kin'
      CALL g2_kin( ik )
      !
      ! ... More stuff needed by the hamiltonian: nonlocal projectors
@@ -297,7 +297,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
   external g_1psi
   external g_1psi_gpu
   ALLOCATE( h_diag( npwx, npol ), STAT=ierr )
-  print*, 'chiama diag_bands_gipaw'
+!  print*, 'chiama diag_bands_gipaw'
   m = nbnd
   IF( ierr /= 0 ) &
      CALL errore( ' diag_bands ', ' cannot allocate h_diag ', ABS(ierr) )
@@ -1039,7 +1039,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
                 !
              ELSE
                 !
-                print*, 'chiama la sub cegterg'
+!                print*, 'chiama la sub cegterg'
                 CALL cegterg ( h_psi_gipaw, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )

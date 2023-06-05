@@ -14,14 +14,14 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
   !   structure factor, for all atoms, in reciprocal space
   !
   USE kinds,      ONLY : DP
-  USE ions_base,  ONLY : nat, ntyp => nsp, ityp
+  USE ions_base,  ONLY : nat, ntyp => nsp, ityp, tau
   USE cell_base,  ONLY : tpiba
   USE constants,  ONLY : tpi
   USE gvect,      ONLY : eigts1, eigts2, eigts3, mill, g
   USE wvfct,      ONLY : npwx
   USE uspp_data,  ONLY : nqx, dq, tab
   USE splinelib
-  USE uspp,       ONLY : nkb, nhtol, nhtolm, indv
+  USE uspp,       ONLY : nkb, nhtol, nhtolm, indv, vkb
   USE uspp_param, ONLY : upf, lmaxkb, nhm, nh
   USE gipaw_module, ONLY : spline_ps, tab_d2y
   !
@@ -39,10 +39,10 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
   !
   integer :: i0,i1,i2,i3, ig, l, lm, na, nt, nb, ih, jkb
 
-  real(DP) :: px, ux, vx, wx
+  real(DP) :: px, ux, vx, wx, arg
   real(DP), allocatable :: gk (:,:), qg (:), vq (:), ylm (:,:), vkb1(:,:)
 
-  complex(DP) :: pref
+  complex(DP) :: phase, pref
   complex(DP), allocatable :: sk(:)
 
   real(DP), allocatable :: xdata(:)
@@ -51,7 +51,7 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
   !
   !
   call start_clock('init_us_2_np')
-  vkb_ = (0.d0,0.d0)
+!  vkb_ = (0.d0,0.d0)
   if (lmaxkb.lt.0) return
   allocate (vkb1( npw_,nhm))    
   allocate (  sk( npw_))    
@@ -81,7 +81,6 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
       xdata(iq) = (iq - 1) * dq
     enddo
   endif
-
   jkb = 0
   do nt = 1, ntyp
      ! calculate beta in G-space using an interpolation table
@@ -98,15 +97,10 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
              i1 = i0 + 1
              i2 = i0 + 2
              i3 = i0 + 3     
-             !*apsi TMPTMPTMP      
-             if ( i3 > size(tab,1) ) then
-                vq(ig) = 0.0_dp
-             else
-               vq (ig) = tab (i0, nb, nt) * ux * vx * wx / 6.d0 + &
-                         tab (i1, nb, nt) * px * vx * wx / 2.d0 - &
-                         tab (i2, nb, nt) * px * ux * wx / 2.d0 + &
-                         tab (i3, nb, nt) * px * ux * vx / 6.d0
-             endif
+             vq (ig) = tab (i0, nb, nt) * ux * vx * wx / 6.d0 + &
+                       tab (i1, nb, nt) * px * vx * wx / 2.d0 - &
+                       tab (i2, nb, nt) * px * ux * wx / 2.d0 + &
+                       tab (i3, nb, nt) * px * ux * vx / 6.d0
            endif
         enddo
         ! add spherical harmonic part
@@ -116,7 +110,6 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
               lm =nhtolm (ih, nt)
               do ig = 1, npw_
                  vkb1 (ig,ih) = ylm (ig, lm) * vq (ig)
-                 if (isnan(vq(ig))) STOP
               enddo
            endif
         enddo
@@ -130,10 +123,10 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
         ! ordering: first all betas for atoms of type 1
         !           then  all betas for atoms of type 2  and so on
         if (ityp (na) .eq.nt) then
-           !arg = (q_(1) * tau (1, na) + &
-           !       q_(2) * tau (2, na) + &
-           !       q_(3) * tau (3, na) ) * tpi
-           !phase = CMPLX(cos (arg), - sin (arg) ,kind=DP)
+           arg = (q_(1) * tau (1, na) + &
+                  q_(2) * tau (2, na) + &
+                  q_(3) * tau (3, na) ) * tpi
+           phase = CMPLX(cos (arg), - sin (arg) )
            do ig = 1, npw_
               sk (ig) = eigts1 (mill(1,igk_(ig)), na) * &
                         eigts2 (mill(2,igk_(ig)), na) * &
@@ -141,7 +134,7 @@ subroutine init_us_2_no_phase (npw_, igk_, q_, vkb_)
            enddo
            do ih = 1, nh (nt)
               jkb = jkb + 1
-              pref = (0.d0, -1.d0) **nhtol (ih, nt)! * phase
+              pref = (0.d0, -1.d0) **nhtol (ih, nt) !* phase
               do ig = 1, npw_
                   vkb_(ig, jkb) = vkb1 (ig,ih) * sk (ig) * pref
               enddo

@@ -67,7 +67,7 @@ MODULE gipaw_module
   REAL(dp) :: max_seconds
  
   ! verbosity
-  INTEGER :: iverbosity
+!  INTEGER :: iverbosity
  
   ! diagonalization method
   INTEGER :: isolve

@@ -5,7 +5,7 @@ SUBROUTINE newscf
   USE constants, ONLY : bohr_radius_angs, fpi
   USE io_global, ONLY : stdout
   USE cell_base, ONLY : omega
-  USE ions_base, ONLY : nat, tau
+  USE ions_base, ONLY : nat, tau, ityp, atm
   USE fft_base,  ONLY : dfftp, dffts
   USE scf,       ONLY : rho, rho_core
   USE xc_lib,    ONLY : xclib_set_threshold, dmxc
@@ -24,7 +24,8 @@ SUBROUTINE newscf
   USE ldaU,          ONLY : lda_plus_u
   USE control_flags, ONLY : restart, io_level, lscf, iprint, &
                             david, max_cg_iter, nexxiter, &
-                            isolve, tr2, ethr, mixing_beta, nmix, niter
+                            isolve, tr2, ethr, mixing_beta, nmix, niter, &
+                            iverbosity
   USE extrapolation, ONLY : extrapolate_charge
   USE kinds,         ONLY : dp
   USE input_parameters, ONLY : startingpot, startingwfc, restart_mode
@@ -33,7 +34,8 @@ SUBROUTINE newscf
   USE lsda_mod,   ONLY: nspin, current_spin
   USE orbital_magnetization, ONLY : dvrs
   USE wvfct,    ONLY : g2kin, nbndx, nbnd
-
+  USE gipaw_module, ONLY : conv_threshold
+  USE mp_pools,        ONLY : intra_pool_comm, inter_pool_comm
   !
   IMPLICIT NONE
   !
@@ -44,7 +46,8 @@ SUBROUTINE newscf
   REAL(DP), DIMENSION(3,3) :: chi(3,3)
   REAL(DP), DIMENSION(dfftp%nnr,1) ::  rhotot, sign_r
   REAL(DP) :: exxen
-
+  
+  
   !  dft='starting from scratch'
   restart  =.false.
   io_level = 0
@@ -74,9 +77,8 @@ SUBROUTINE newscf
   david = 4
   nbndx = max (nbndx, david*nbnd)
   isolve=0
-  tr2 =1.d-14
-  ethr=2.d-6
-  mixing_beta=0.2d0
+  ethr = conv_threshold
+  !
   nmix=8
   niter=100
   nexxiter=100

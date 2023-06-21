@@ -82,6 +82,7 @@ SUBROUTINE electrons_gipaw()
   LOGICAL :: DoLoc
   !
   !
+!  print*,'entra in electrons_giapw'
   DoLoc = local_thr.gt.0.0d0
   exxen = 0.0d0
   iter = 0
@@ -170,7 +171,7 @@ SUBROUTINE electrons_gipaw()
         CALL potinit()
         CALL wfcinit()
      END IF
-     CALL electrons_scf_gipaw(printout,exxen)
+     CALL electrons_scf_gipaw(printout,exxen) !?
      CALL save_rhon(rho)
      CALL close_files(.true.)
      CALL occ_fn2f()
@@ -422,7 +423,7 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
                                    iprint, conv_elec, sic, &
                                    restart, io_level, do_makov_payne,  &
-                                   gamma_only, iverbosity, textfor,     &
+                                   gamma_only, textfor, iverbosity,     &
                                    llondon, ldftd3, scf_must_converge, lxdm, ts_vdw, &
                                    mbd_vdw, use_gpu
   USE control_flags,        ONLY : n_scf_steps, scf_error, scissor
@@ -468,7 +469,7 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
   USE wvfct_gpum,           ONLY : using_et
   USE scf_gpum,             ONLY : using_vrs
   USE device_fbuff_m,       ONLY : dev_buf, pin_buf
-  USE pwcom,                ONLY : report_mag 
+  USE pwcom,                ONLY : report_mag
   !
 #if defined (__ENVIRON)
   USE plugin_flags,         ONLY : use_environ
@@ -539,7 +540,6 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
   LOGICAL :: lhb
   !! if .TRUE. then background states are present (DFT+U)
   !
-  print*, 'chiama electrons'
   lhb = .FALSE.
   IF ( lda_plus_u )  THEN
      DO nt = 1, ntyp
@@ -552,7 +552,7 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
   IF ( restart ) CALL restart_in_electrons( iter, dr2, ethr, et )
   IF ( restart ) CALL using_et(2)
   !
-  WRITE( stdout, 9000 ) get_clock( 'PWSCF' )
+!  WRITE( stdout, 9000 ) get_clock( 'PWSCF' )
   !
   CALL memstat( kilobytes )
   IF ( kilobytes > 0 ) WRITE( stdout, 9001 ) kilobytes/1000.0
@@ -992,7 +992,7 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
         IF ( conv_elec ) CALL report_mag(SAVE_LOCALS=.TRUE.)
      END IF
      !
-     WRITE( stdout, 9000 ) get_clock( 'PWSCF' )
+!     WRITE( stdout, 9000 ) get_clock( 'PWSCF' )
      !
      IF ( conv_elec ) WRITE( stdout, 9101 )
  

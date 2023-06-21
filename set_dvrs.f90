@@ -66,7 +66,7 @@ SUBROUTINE gradient( nrx1, nrx2, nrx3, &
   COMPLEX(DP), ALLOCATABLE :: aux(:), gaux(:)
   !
   !
-  print*, 'entra in gradient'
+!  print*, 'entra in gradient'
   ALLOCATE(  aux( nrxx ) )
   ALLOCATE( gaux( nrxx ) )
   !

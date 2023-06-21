@@ -33,8 +33,12 @@ electrons_gipaw.o \
 set_dvrs.o \
 c_bands_gipaw.o \
 h_psi_gipaw.o \
+stop_code.o \
 gipaw_module.o \
 gipaw_setup.o \
+init_us_2_no_phase.o \
+compute_u_kq.o \
+compute_dudk_new.o \
 wfcinit_gipaw.o \
 rotate_wfc_gipaw.o \
 rotate_wfc_k_gipaw.o \

@@ -24,16 +24,20 @@
 !  USE ldaU,                 ONLY : swfcatom, lda_plus_u
   USE buffers,               ONLY : get_buffer
   USE scf,                   ONLY : vrs
-  USE mp_global,             ONLY : my_pool_id, me_pool, root_pool
+  USE mp_global,             ONLY : my_pool_id
   USE mp_bands,              ONLY : intra_bgrp_comm, inter_bgrp_comm
   USE mp_world,              ONLY : mpime, world_comm
   USE mp,                    ONLY : mp_barrier, mp_sum
-  USE mp_pools,              ONLY : intra_pool_comm
-  USE gipaw_module,          ONLY : q_gipaw, nmr_shift_core, iverbosity
+  USE mp_pools,              ONLY : my_pool_id, me_pool, root_pool,  &
+                                    inter_pool_comm, intra_pool_comm
+  USE mp_images,             ONLY : my_image_id, inter_image_comm, nimage, &
+                                    intra_image_comm
+  USE gipaw_module,          ONLY : q_gipaw, nmr_shift_core
   USE uspp_init,             ONLY : init_us_2
   USE gvecw,                 ONLY : gcutw
-  USE mp_pools,              ONLY : inter_pool_comm
-  USE orbital_magnetization, 
+  USE control_flags,         ONLY : iverbosity
+  USE orbital_magnetization,
+  USE mpi,
   implicit none
   complex(dp), external :: ZDOTC
   integer, parameter :: iundudk1 = 75, iundudk2 = 76, iundudk3 = 77
@@ -46,11 +50,16 @@
   real(dp) :: tmp(3), emin, emax
   ! index for the cross product
   integer :: ind(2,3)
+  
+  !debug mpi 
+  integer :: ierr, num_procs, rank, root, i, dd, comm_rank
+  real :: partial_value, gathered_kp_berry(6)
+
   ind(:,1) = (/ 2, 3 /)
   ind(:,2) = (/ 3, 1 /)
   ind(:,3) = (/ 1, 2 /)
 
-  print*, 'chiama calc_orb_magn'
+!  print*, 'chiama calc_orb_magn'
 
   ! various initializations:
   nrxxs = dffts%nnr
@@ -62,22 +71,20 @@
     npw = ngk (ik) !number of plane waves for each k point
   enddo
   
-  print*, 'q_gipaw', q_gipaw, tpiba, dudk_method
-  
   delta_k = q_gipaw/tpiba
    
-  ! compute the covariant derivatives
-!  call compute_dudk_new (dudk_method)
-  call compute_dudk_converse (dudk_method)
+!  compute the covariant derivatives
+  call compute_dudk_new (dudk_method)
+!  call compute_dudk_converse (dudk_method)
   ! allocate memory
   allocate (dudk_bra(npwx,nbnd), dudk_ket(npwx,nbnd), hpsi(npwx))
     ! zero the accumulators
 #if defined(__MPI)
-  CALL mp_barrier(intra_bgrp_comm)  ! ne ho bisogno?
+!  CALL mp_barrier(world_comm)  ! ne ho bisogno?
 #endif
+
   write(stdout,*)
   write(stdout,'(5X,''Computing the orbital magnetization (bohr mag/cell):'')')
-
   berry_curvature = 0.d0
   orb_magn_LC = 0.d0
   orb_magn_IC = 0.d0
@@ -89,6 +96,7 @@
   call allocate_bec_type(nkb, nbnd, becp)
   allocate(dbecp(nkb,nbnd,3), paw_dbecp(paw_nkb,nbnd,3))
   allocate(vkb_save(npwx,nkb), aux(nkb,nbnd))
+#define __USE_BARRIER
 
    ! loop over k-points
   do ik = 1, nks
@@ -121,11 +129,10 @@
     do kk =  1, 3
       ii = ind(1,kk)
       jj = ind(2,kk)
-    
       ! read the bra and the ket
       call davcio(dudk_bra, 2*nwordwfc, iundudk1 + ii - 1, ik, -1)
       call davcio(dudk_ket, 2*nwordwfc, iundudk1 + jj - 1, ik, -1)
-
+      
       ! compute the orbital magnetization
       kp_berry(kk) = 0.d0
       kp_M_IC(kk) = 0.d0
@@ -152,16 +159,20 @@
         orb_magn_LC(kk) = orb_magn_LC(kk) - wg(ibnd,ik)*imag(braket)
 
       enddo
-
      ! compute the GIPAW corrections
       call calc_delta_M_bare
       if (any(lambda_so /= 0.d0)) call calc_delta_M_para_so
     enddo ! kk
-#if defined(__MPI)
-  CALL mp_sum( kp_berry, intra_bgrp_comm )
-  CALL mp_sum( kp_M_LC, intra_bgrp_comm )
-  CALL mp_sum( kp_M_IC, intra_bgrp_comm )
+    ! Parallel reductions
+#ifdef __MPI
+  call mp_sum( kp_berry, intra_pool_comm )
+  call mp_sum( kp_M_LC, intra_pool_comm )
+  call mp_sum( kp_M_IC, intra_pool_comm )
+  call mp_sum( kp_berry, inter_pool_comm )
+  call mp_sum( kp_M_LC, inter_pool_comm )
+  call mp_sum( kp_M_IC, inter_pool_comm )
 #endif
+  
     if (me_pool == root_pool) then
       write(*,'(''BC: k-point:'',I5,2X,''pool:'',I4,4X,9F12.6)') ik, my_pool_id+1, kp_berry
       write(*,'(''LC: k-point:'',I5,2X,''pool:'',I4,4X,9F12.6)') ik, my_pool_id+1, kp_M_LC*rydtohar
@@ -170,21 +181,19 @@
 !            ik, my_pool_id+1, xk(:,ik), kp_berry, kp_M_LC*rydtohar, kp_M_IC*rydtohar
     endif
   enddo !ik
-#if defined(__MPI)
-  CALL mp_sum( orb_magn_LC, intra_bgrp_comm )
-  CALL mp_sum( orb_magn_IC, intra_bgrp_comm )
-  CALL mp_sum( berry_curvature, intra_bgrp_comm )
+  
+#ifdef __MPI
+ ! no reduction for delta_M_bare and delta_M_para and delta_M_dia
+  call mp_sum(orb_magn_LC, intra_pool_comm )
+  call mp_sum(orb_magn_IC, intra_pool_comm )
+  call mp_sum(berry_curvature, intra_pool_comm )
+  call mp_sum(orb_magn_LC, inter_pool_comm )
+  call mp_sum(orb_magn_IC, inter_pool_comm )
+  call mp_sum(berry_curvature, inter_pool_comm )
 #endif
-  ! no reduction for delta_M_bare and delta_M_para and delta_M_dia ?
+  
+  ! no reduction for delta_M_bare and delta_M_para and delta_M_dia 
 
-!#ifdef __PARA  necessari? forse no
-!  call poolreduce(3, orb_magn_LC)
-!  call poolreduce(3, orb_magn_IC)
-!  call poolreduce(3, berry_curvature)
-!  call poolreduce(3, delta_M_bare)
-!  call poolreduce(3, delta_M_para)
-!  call poolreduce(3, delta_M_dia)
-!#endif
 
   ! close files
   close(unit=iundudk1, status='keep')
@@ -520,7 +529,6 @@
   USE control_flags,        ONLY : iverbosity
   USE buffers,              ONLY : get_buffer
   USE gvecw,                ONLY : gcutw
-  USE gipaw_module,         ONLY : iverbosity
   USE paw_gipaw,            ONLY : paw_vkb, paw_nkb, paw_recon, paw_lmaxkb, &
                                    paw_becp
   implicit none

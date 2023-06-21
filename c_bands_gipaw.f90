@@ -362,7 +362,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
     !
     INTEGER :: j
     !
-    print*, 'diag_bands_gamma_gipaw'
+!    print*, 'diag_bands_gamma_gipaw'
     IF ( isolve == 1 .OR. isolve == 2 .OR. isolve == 3 .OR. rmm_use_paro_gipaw(iter))   THEN
        !
        ! ... (Projected Preconditioned) Conjugate-Gradient diagonalization
@@ -393,7 +393,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
              IF ( .NOT. lrot ) THEN
                 !
                 IF (.not. use_gpu) THEN
-                        print*,'entra da c_bands1'
+!                        print*,'entra da c_bands1'
                    CALL using_evc(1);  CALL using_et(1); ! et is used as intent(out), set intento=2?
                    CALL rotate_wfc_gipaw ( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
@@ -703,7 +703,6 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
     !
     m = nbnd 
     !write (*,*) ' enter diag_bands_k'; FLUSH(6)
-    print*, 'diag_bands_k_gipaw'
     IF ( lelfield ) THEN
        !
        ! ... save wave functions from previous iteration for electric field
@@ -772,7 +771,6 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
              IF ( .NOT. lrot ) THEN
                 !
                 IF ( .not. use_gpu ) THEN
-                        print*,'entra da c_bands2'
                    CALL using_evc(1); CALL using_et(1);
                    CALL rotate_wfc_gipaw ( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
@@ -819,7 +817,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
                avg_iter = avg_iter + ppcg_iter
                !
              END IF
-          ELSE 
+          ELSE
              !
              IF ( .not. use_gpu ) THEN
                CALL using_evc(1); CALL using_et(1); CALL using_h_diag(0)
@@ -987,11 +985,12 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
        ! ... hamiltonian used in g_psi to evaluate the correction
        ! ... to the trial eigenvectors
        !
-       print*, 'inizia qui la Davidson'
+!       print*, 'inizia qui la Davidson'
        IF ( .not. use_gpu ) THEN
           !
           CALL using_h_diag(2);
           !
+!          print*, 'npol', npol
           DO ipol = 1, npol
              !
              h_diag(1:npw, ipol) = g2kin(1:npw) + v_of_0
@@ -1043,7 +1042,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
                 CALL cegterg ( h_psi_gipaw, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                print*, 'si blocca qui'
+!                print*, 'si blocca qui'
              END IF
           ELSE
              CALL using_evc_d(1) ; CALL using_et_d(1) 
@@ -1337,7 +1336,7 @@ SUBROUTINE c_bands_nscf_gipaw( )
   !
 9002 FORMAT(/'     Computing kpt #: ',I5, '  of ',I5,' on this pool' )
 9001 FORMAT(/'     Computing kpt #: ',I5, '  of ',I5 )
-9000 FORMAT( '     total cpu time spent up to now is ',F10.1,' secs' )
+9000 FORMAT( '     total cpu time spent up to now is c_bands ',F10.1,' secs' )
   !
 END SUBROUTINE c_bands_nscf_gipaw
 

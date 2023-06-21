@@ -25,6 +25,7 @@ SUBROUTINE gipaw_setup
   USE mp_bands,      ONLY : intra_bgrp_comm
   USE gipaw_module
   USE ions_base, only: tau, ityp
+  USE control_flags, ONLY : iverbosity
   USE orbital_magnetization, ONLY: dvrs
 
   implicit none
@@ -48,7 +49,7 @@ SUBROUTINE gipaw_setup
   call plugin_scf_potential(rho, .false., -1d0)
   call set_vrs (vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, nspin, doublegrid)
   CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin )
-  print*, 'dvrs in setup'
+!  print*, 'dvrs in setup'
 
 END SUBROUTINE gipaw_setup
 
@@ -68,6 +69,7 @@ SUBROUTINE gipaw_setup_integrals
   USE uspp_param,    ONLY : upf
   USE io_global,     ONLY : stdout
   USE wvfct,         ONLY : nbnd, npwx, nbndx
+  USE control_flags, ONLY : iverbosity
 
   implicit none
 

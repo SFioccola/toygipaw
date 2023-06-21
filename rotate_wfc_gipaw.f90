@@ -53,6 +53,7 @@ SUBROUTINE rotate_wfc_gipaw ( npwx, npw, nstart, gstart, nbnd, psi, npol, overla
   CALL start_clock( 'wfcrot' ); !write (*,*) 'start wfcrot' ; FLUSH(6)
   !write (*,*) 'gamma_only' , gamma_only; FLUSH(6)
   !
+!  print*, 'use_para diag', use_para_diag
   IF( use_para_diag ) THEN
      !
      ! use data distributed subroutine

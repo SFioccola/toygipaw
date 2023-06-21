@@ -65,7 +65,6 @@ stm.o \
 stop_pp.o \
 sum_band_kin.o \
 sym_band.o \
-util.o \
 vasp_read_chgcar_mod.o \
 vasp_xml_module.o \
 wannier_proj.o \
@@ -78,6 +77,7 @@ write_hamiltonians.o \
 globalmod.o \
 fouriermod.o \
 idwmod.o \
+util.o \
 oscdft_pp_mod.o \
 oscdft_et_mod.o \
 xc_vdW_scale_mod.o   # added by Yang Jiao

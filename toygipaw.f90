@@ -41,6 +41,7 @@ PROGRAM toygipaw
   USE buffers,          ONLY : open_buffer, close_buffer, save_buffer
   USE dfunct,             ONLY : newd
   USE orbital_magnetization, ONLY : dvrs
+  USE cellmd,           ONLY : cell_factor
 
   IMPLICIT NONE
 
@@ -122,7 +123,7 @@ if (.not. ionode .or. my_image_id > 0) goto 400
 #endif
 
   io_level = 1
-
+  cell_factor = 1.1d0
   !read ground state wavefunctions  
   CALL read_file ( )
 

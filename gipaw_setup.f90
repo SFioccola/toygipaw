@@ -26,7 +26,6 @@ SUBROUTINE gipaw_setup
   USE gipaw_module
   USE ions_base, only: tau, ityp
   USE control_flags, ONLY : iverbosity
-  USE orbital_magnetization, ONLY: dvrs
 
   implicit none
   integer :: ik, ibnd
@@ -43,13 +42,10 @@ SUBROUTINE gipaw_setup
   call gipaw_setup_splines
 
   
-  allocate (dvrs (dffts%nnr, nspin, 3))
 ! computes the total local potential (external+scf) on the smooth grid
   call setlocal
   call plugin_scf_potential(rho, .false., -1d0)
   call set_vrs (vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, nspin, doublegrid)
-  CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin )
-!  print*, 'dvrs in setup'
 
 END SUBROUTINE gipaw_setup
 

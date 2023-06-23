@@ -97,6 +97,8 @@
   allocate(dbecp(nkb,nbnd,3), paw_dbecp(paw_nkb,nbnd,3))
   allocate(vkb_save(npwx,nkb), aux(nkb,nbnd))
 #define __USE_BARRIER
+   
+  CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin ) 
 
    ! loop over k-points
   do ik = 1, nks

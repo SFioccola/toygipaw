@@ -46,6 +46,8 @@ SUBROUTINE newscf
   REAL(DP), DIMENSION(3,3) :: chi(3,3)
   REAL(DP), DIMENSION(dfftp%nnr,1) ::  rhotot, sign_r
   REAL(DP) :: exxen
+  allocate (dvrs (dffts%nnr, nspin, 3))
+
   
   
   !  dft='starting from scratch'
@@ -87,6 +89,9 @@ SUBROUTINE newscf
   call openfil
   call hinit0 ( )
   call potinit ( )
+  
+  CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin )
+
   call newd ( )
   call wfcinit_gipaw ( )
   CALL electrons_gipaw ( )

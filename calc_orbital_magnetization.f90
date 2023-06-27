@@ -36,8 +36,8 @@
   USE uspp_init,             ONLY : init_us_2
   USE gvecw,                 ONLY : gcutw
   USE control_flags,         ONLY : iverbosity
-  USE orbital_magnetization,
-  USE mpi,
+  USE orbital_magnetization
+  
   implicit none
   complex(dp), external :: ZDOTC
   integer, parameter :: iundudk1 = 75, iundudk2 = 76, iundudk3 = 77

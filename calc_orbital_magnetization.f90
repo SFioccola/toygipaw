@@ -37,7 +37,7 @@
   USE gvecw,                 ONLY : gcutw
   USE control_flags,         ONLY : iverbosity
   USE orbital_magnetization
-  
+
   implicit none
   complex(dp), external :: ZDOTC
   integer, parameter :: iundudk1 = 75, iundudk2 = 76, iundudk3 = 77
@@ -82,7 +82,9 @@
 #if defined(__MPI)
 !  CALL mp_barrier(world_comm)  ! ne ho bisogno?
 #endif
-
+  
+  call start_clock ('orbital_magnetization')
+  
   write(stdout,*)
   write(stdout,'(5X,''Computing the orbital magnetization (bohr mag/cell):'')')
   berry_curvature = 0.d0
@@ -243,7 +245,8 @@
   close(unit=iundudk1)
   close(unit=iundudk2)
   close(unit=iundudk3)
-
+  
+  call stop_clock ('orbital_magnetization')
   ! go on, reporting the g-tensor
   if (any(lambda_so /= 0.d0)) call calc_g_tensor(orb_magn_tot)
 

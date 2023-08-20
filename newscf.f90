@@ -2,7 +2,7 @@
 SUBROUTINE newscf
 !-----------------------------------------------------------------------
 !! Recalculate self-consistent
-  USE constants, ONLY : bohr_radius_angs, fpi
+  USE constants, ONLY : bohr_radius_angs, fpi, rytoev
   USE io_global, ONLY : stdout
   USE cell_base, ONLY : omega
   USE ions_base, ONLY : nat, tau, ityp, atm
@@ -14,7 +14,7 @@ SUBROUTINE newscf
   USE gvecs, ONLY: doublegrid
   USE gvect, ONLY: gstart
   USE wvfct, ONLY: btype
-  USE klist, ONLY: nkstot
+  USE klist, ONLY: nkstot, lgauss, ltetra
   USE wvfct, ONLY: nbnd, nbndx
   USE noncollin_module, ONLY: report
   USE check_stop,    ONLY : check_stop_init
@@ -25,7 +25,7 @@ SUBROUTINE newscf
   USE control_flags, ONLY : restart, io_level, lscf, iprint, &
                             david, max_cg_iter, nexxiter, &
                             isolve, tr2, ethr, mixing_beta, nmix, niter, &
-                            iverbosity
+                            iverbosity, do_makov_payne, ldftd3
   USE extrapolation, ONLY : extrapolate_charge
   USE kinds,         ONLY : dp
   USE input_parameters, ONLY : startingpot, startingwfc, restart_mode
@@ -34,8 +34,10 @@ SUBROUTINE newscf
   USE lsda_mod,   ONLY: nspin, current_spin
   USE orbital_magnetization, ONLY : dvrs
   USE wvfct,    ONLY : g2kin, nbndx, nbnd
-  USE gipaw_module, ONLY : conv_threshold
+  USE gipaw_module, ONLY : conv_threshold, assume_isolated
   USE mp_pools,        ONLY : intra_pool_comm, inter_pool_comm
+  USE ener,                 ONLY : ef, ef_up, ef_dw, ef_cond
+  USE martyna_tuckerman, ONLY : do_comp_mt
   !
   IMPLICIT NONE
   !
@@ -46,6 +48,7 @@ SUBROUTINE newscf
   REAL(DP), DIMENSION(3,3) :: chi(3,3)
   REAL(DP), DIMENSION(dfftp%nnr,1) ::  rhotot, sign_r
   REAL(DP) :: exxen
+  REAL(dp) :: ehomo, elumo ! highest occupied and lowest unoccupied levels
   allocate (dvrs (dffts%nnr, nspin, 3))
 
   
@@ -70,13 +73,32 @@ SUBROUTINE newscf
      btype(:,:) = 1
   end if
   !
+  !
+  SELECT CASE( trim( assume_isolated ) )
+      !
+    CASE( 'makov-payne', 'm-p', 'mp' )
+      !
+      do_makov_payne = .true.
+      !
+    CASE( 'martyna-tuckerman', 'm-t', 'mt' )
+      !
+      do_comp_mt     = .true.
+      !
+      CONTINUE
+      !
+    CASE DEFAULT
+      !
+      do_makov_payne = .false.
+      do_comp_mt     = .false.
+      !
+  END SELECT
   !  since we use only Gamma we don't need symmetries
   !
   nsym=1
   !
   ! these must be tuned for fast convergence
   !
-  david = 4
+  david = 6
   nbndx = max (nbndx, david*nbnd)
   isolve=0
   ethr = conv_threshold
@@ -87,6 +109,7 @@ SUBROUTINE newscf
   !
   iunwfc  = 9 ! change the number of unit iunwfc
   call openfil
+  call summary ( )
   call hinit0 ( )
   call potinit ( )
   
@@ -95,6 +118,13 @@ SUBROUTINE newscf
   call newd ( )
   call wfcinit_gipaw ( )
   CALL electrons_gipaw ( )
+  
+  ! compute the Fermi Energy for not a metal 
+  IF ( .NOT. lgauss .OR. ltetra ) THEN
+          ! ... presumably not a metal
+          CALL get_homo_lumo (ehomo, elumo)
+          ef = (ehomo + elumo)/2.d0
+  ENDIF
 
 !!! Alternative routine to perform SCF:
 !  call openfil 

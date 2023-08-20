@@ -26,6 +26,8 @@ SUBROUTINE compute_dudk_new(dudk_method)
   logical :: exst
   integer :: ik, ipol, occ
   integer, parameter :: iundudk1 = 75, iundudk2 = 76, iundudk3 = 77
+  
+  call start_clock ('compute_dudk')
 
   call diropn(iundudk1, 'dudk1', 2*nwordwfc, exst)
   call diropn(iundudk2, 'dudk2', 2*nwordwfc, exst)
@@ -34,8 +36,6 @@ SUBROUTINE compute_dudk_new(dudk_method)
   ! allocate covariant derivatives
     allocate (dudk(npwx,nbnd,3) )
 
-
-  print*, 'entra dudk new'
   if (ik == 1) write(stdout,*)
   write(stdout,'(5X,''Computing du/dk '',$)')
   if (trim(dudk_method) == 'read') then
@@ -53,11 +53,18 @@ SUBROUTINE compute_dudk_new(dudk_method)
     enddo
 
 
-!  elseif (trim(dudk_method) == 'singlepoint') then
-!    write(stdout,'(''(single point)'')') 
-!    call find_nbnd_occ(ik, occ, emin, emax)
-!    write(stdout,'(5X,''k-point:'',I4,4X,''occ='',I3)') ik, occ
+  elseif (trim(dudk_method) == 'singlepoint') then
+    write(stdout,'(''(single point)'')') 
+    do ik = 1, nks
+    call find_nbnd_occ(ik, occ, emin, emax)
+    write(stdout,'(5X,''k-point:'',I4,4X,''occ='',I3)') ik, occ
 !    call dudk_covariant_single_point(ik, occ, dudk)
+    call dudk_covariant_single_point_old(ik, occ, dudk)
+    do ipol = 1, 3
+        call davcio( dudk(1,1,ipol), 2*nwordwfc, iundudk1 + ipol - 1, ik, +1 )
+    enddo
+    enddo
+
     
 !  elseif (trim(dudk_method) == 'kdotp') then
 !    write(stdout,'(''(k \dot p perturbation)'')') 
@@ -78,6 +85,8 @@ SUBROUTINE compute_dudk_new(dudk_method)
 
    write(stdout,'(5X,''done with du/dk'',3X,''q_gipaw = '',F8.6)') q_gipaw
    deallocate(dudk)
+
+  call stop_clock ('compute_dudk')
 END SUBROUTINE compute_dudk_new
 
 
@@ -209,86 +218,90 @@ END SUBROUTINE dudk_covariant
 !-----------------------------------------------------------------------
 ! covariant derivative (single point)
 !-----------------------------------------------------------------------
-!SUBROUTINE dudk_covariant_single_point(ik, occ, dudk)
-!  USE kinds,     ONLY : dp  
-!  USE cell_base, ONLY : bg, tpiba
-!  USE gvect,     ONLY : ngm, g
-!  USE wvfct,     ONLY : npw, igk, nbnd, npwx 
-!  USE wavefunctions_module, ONLY : evc
-!  USE gvecs  ,   ONLY : nls, nlsm
-!  USE fft_base,         ONLY : dffts
-!  USE fft_interfaces,   ONLY : fwfft, invfft
-!  USE mp_global,        ONLY : intra_pool_comm 
-!  USE mp,               ONLY : mp_sum
-!  USE gipaw_module,     ONLY : evq
-!  implicit none
-!  complex(dp), external :: zdotc
-!  integer :: ik, i, occ, sig
-!  complex(dp), allocatable :: psir(:,:), aux(:), aux2(:,:)
-!  complex(dp) :: dudk(npwx,nbnd,3)
-!  integer :: ibnd, jbnd, ipol
-!  complex(dp), allocatable :: overlap(:,:)
-!  real(dp) :: bmod, q_gipaw3(3)
+SUBROUTINE dudk_covariant_single_point(ik, occ, dudk)
+  USE kinds,     ONLY : dp  
+  USE cell_base, ONLY : bg, tpiba
+  USE gvect,     ONLY : ngm, g
+  USE klist,     ONLY : igk_k
+  USE wvfct,     ONLY : npw, nbnd, npwx 
+  USE wavefunctions,    ONLY : evc
+!  USE gvecs  ,          ONLY : nls, nlsm
+  USE fft_base,         ONLY : dffts
+  USE fft_interfaces,   ONLY : fwfft, invfft
+  USE mp_global,        ONLY : intra_pool_comm 
+  USE mp,               ONLY : mp_sum
+  USE gipaw_module,     ONLY : evq
+  implicit none
+  complex(dp), external :: zdotc
+  integer :: ik, i, occ, sig
+  complex(dp), allocatable :: psir(:,:), aux(:), aux2(:,:)
+  complex(dp) :: dudk(npwx,nbnd,3)
+  integer :: ibnd, jbnd, ipol
+  integer :: nls, nlm
+  complex(dp), allocatable :: overlap(:,:)
+  real(dp) :: bmod, q_gipaw3(3)
+  
+   
+!  nls = dffts%nl
+!  nlm = dffts%nlm
+  if (occ == 0) return
 
-!  if (occ == 0) return
-
- ! allocate real space wfcs
-!  allocate ( psir(dffts%nnr,occ), aux(dffts%nnr), aux2(dffts%nnr,occ) )
-
+!  allocate real space wfcs
+  allocate ( psir(dffts%nnr,occ), aux(dffts%nnr), aux2(dffts%nnr,occ) )
   ! transform the wfcs to real space
-!  do ibnd = 1, occ
-!    aux(:) = (0.d0, 0.d0)
-!    aux(nls(igk(1:npw))) = evc(1:npw,ibnd)
-!    CALL invfft ('Wave', aux, dffts)
-!    psir(:,ibnd) = aux(:)
-!  enddo
+  do ibnd = 1, occ
+    aux(:) = (0.d0, 0.d0)
+    aux(dffts%nl(igk_k(1:npw,ik))) = evc(1:npw,ibnd)
+    CALL invfft ('Wave', aux, dffts)
+    psir(:,ibnd) = aux(:)
+  enddo
 
   ! allocate/initialize  overlap matrix and dudk
-!  allocate( overlap(occ,occ) )
-!  overlap(:,:) = (0.0_dp, 0.0_dp)   
-!  dudk(:,:,:) = (0.0_dp, 0.0_dp)
+  allocate( overlap(occ,occ) )
+  overlap(:,:) = (0.0_dp, 0.0_dp)   
+  dudk(:,:,:) = (0.0_dp, 0.0_dp)
 
   ! loop over crystal directions
-!  do ipol = 1, 3
-!    dudk(1:npwx,1:nbnd,ipol) = (0.d0,0.d0)
+  do ipol = 1, 3
+    dudk(1:npwx,1:nbnd,ipol) = (0.d0,0.d0)
 
     ! loop over +/-1
-!    do sig = -1, 1, 2
+    do sig = -1, 1, 2
 
       ! compute the covariant derivative
-!      do ibnd = 1, occ
+      do ibnd = 1, occ
 !        call apply_eigr(sig, bg(:,ipol), psir(:,ibnd), aux2(:,ibnd))
 !        call fwfft ('Wave', aux2(:,ibnd), dffts)
-!        evq(:,ibnd) = aux2(nls(igk(1:npw)),ibnd)
-!      enddo
+        evq(:,ibnd) = aux2(dffts%nl(igk_k(1:npw,ik)),ibnd)
+      enddo
 
       ! compute overlaps <evc|evq>
-!      do ibnd = 1, occ
-!        do jbnd = 1, occ
-!          overlap(ibnd,jbnd) = zdotc(npw, evc(1,ibnd), 1, evq(1,jbnd), 1)
-!        enddo
-!      enddo
+      do ibnd = 1, occ
+        do jbnd = 1, occ
+          overlap(ibnd,jbnd) = zdotc(npw, evc(1,ibnd), 1, evq(1,jbnd), 1)
+        enddo
+      enddo
 
-!#ifdef __MPI
-!      call mp_sum( overlap, intra_pool_comm )   
-!#endif
-!      call invert_matrix(occ, overlap) 
+#ifdef __MPI
+      call mp_sum( overlap, intra_pool_comm )   
+#endif
+      call invert_matrix(occ, overlap) 
       ! 
-!      bmod = sum(bg(1:3,ipol)**2.d0 ) * tpiba      
+      bmod = sum(bg(1:3,ipol)**2.d0 ) * tpiba      
       !
-!      do ibnd = 1, occ
-!        do jbnd = 1, occ
-!          dudk(1:npw,ibnd,ipol) = dudk(1:npw,ibnd,ipol) + &
-!                        sig * 0.5d0/bmod * &
-!                        overlap(jbnd,ibnd) * evq(1:npw,jbnd) 
-!        enddo
-!      enddo
+      do ibnd = 1, occ
+        do jbnd = 1, occ
+          dudk(1:npw,ibnd,ipol) = dudk(1:npw,ibnd,ipol) + &
+                        sig * 0.5d0/bmod * &
+                        overlap(jbnd,ibnd) * evq(1:npw,jbnd) 
+        enddo
+      enddo
 
-!    enddo ! sig
-!  enddo ! ipol
-!  deallocate(psir, aux, aux2, overlap)
+    enddo ! sig
+  enddo ! ipol
+  deallocate(psir, aux, aux2, overlap)
 
-!END SUBROUTINE dudk_covariant_single_point
+END SUBROUTINE dudk_covariant_single_point
 
 
 
@@ -296,93 +309,94 @@ END SUBROUTINE dudk_covariant
 !-----------------------------------------------------------------------
 ! covariant derivative (single point)
 !-----------------------------------------------------------------------
-!SUBROUTINE dudk_covariant_single_point_old(ik, occ, dudk)
-!  USE kinds,     ONLY : dp  
-!  USE cell_base, ONLY : bg, tpiba
-!  USE gvect,     ONLY : ngm, g
-!  USE wvfct,     ONLY : npw, igk, nbnd, npwx 
-!  USE wavefunctions_module, ONLY : evc
+SUBROUTINE dudk_covariant_single_point_old(ik, occ, dudk)
+  USE kinds,     ONLY : dp  
+  USE cell_base, ONLY : bg, tpiba
+  USE gvect,     ONLY : ngm, g
+  USE klist,     ONLY : igk_k
+  USE wvfct,     ONLY : npw, nbnd, npwx 
+  USE wavefunctions, ONLY : evc
 !  USE gvecs  ,   ONLY : nls, nlsm
-!  USE fft_base,         ONLY : dffts
-!  USE fft_interfaces,   ONLY : fwfft, invfft
-!  USE io_files,             ONLY : nwordatwfc, iunsat, iunwfc, nwordwfc
+  USE fft_base,         ONLY : dffts
+  USE fft_interfaces,   ONLY : fwfft, invfft
+  USE io_files,             ONLY : nwordatwfc, iunsat, iunwfc, nwordwfc
 !  USE ldaU,                 ONLY : lda_plus_u, swfcatom
-!  USE mp_global,            ONLY : intra_pool_comm  !, inter_pool_comm, nproc, npool
-!  USE mp,                   ONLY : mp_sum
-!  USE buffers,   ONLY : get_buffer, save_buffer
-!  USE gipaw_module,     ONLY : evq
-!  implicit none
-!  integer :: ik, i, occ, sig, nrxxs 
-!  complex(dp), allocatable :: psir(:,:), aux(:), aux2(:,:)
-!  complex(dp) :: dudk(npwx,nbnd,3)
-!  integer :: ibnd, jbnd, ipol
-!  complex(dp), allocatable :: overlap(:,:)
-!  real(dp) :: bmod, q_gipaw3(3)
+  USE mp_global,            ONLY : intra_pool_comm  !, inter_pool_comm, nproc, npool
+  USE mp,                   ONLY : mp_sum
+  USE buffers,   ONLY : get_buffer, save_buffer
+  USE gipaw_module,     ONLY : evq
+  implicit none
+  integer :: ik, i, occ, sig, nrxxs 
+  complex(dp), allocatable :: psir(:,:), aux(:), aux2(:,:)
+  complex(dp) :: dudk(npwx,nbnd,3)
+  integer :: ibnd, jbnd, ipol
+  complex(dp), allocatable :: overlap(:,:)
+  real(dp) :: bmod, q_gipaw3(3)
 
-!  if (occ == 0) return
+  if (occ == 0) return
 
-!  nrxxs = dffts%nnr
+  nrxxs = dffts%nnr
 
 ! ! allocate real space wfcs
-!  allocate ( psir(nrxxs,occ), aux(nrxxs), aux2(nrxxs,occ) )
+  allocate ( psir(nrxxs,occ), aux(nrxxs), aux2(nrxxs,occ) )
 
   ! read the wavefunction (not necessary here, wfc for q=0 already stored in evc(:,:) 
-  ! call get_buffer(evc, nwordwfc, iunwfc, ik)
+   call get_buffer(evc, nwordwfc, iunwfc, ik)
   ! IF ( lda_plus_u ) CALL davcio( swfcatom, nwordatwfc, iunsat, ik, -1 )
-
+  
   ! transform to real space
-!  do ibnd = 1, occ
-!    aux(1:nrxxs) = (0.d0, 0.d0)
-!    aux(nls(igk(1:npw))) = evc(1:npw,ibnd)
-!    CALL invfft ('Wave', aux, dffts)
-!    psir(1:nrxxs,ibnd) = aux(1:nrxxs)
-!  enddo
+  do ibnd = 1, occ
+    aux(1:nrxxs) = (0.d0, 0.d0)
+    aux(dffts%nl(igk_k(1:npw,ik))) = evc(1:npw,ibnd)
+    CALL invfft ('Wave', aux, dffts)
+    psir(1:nrxxs,ibnd) = aux(1:nrxxs)
+  enddo
 
   ! allocate overlap matrix
-!  allocate( overlap(occ,occ) )
+  allocate( overlap(occ,occ) )
 
   ! loop over crystal directions
-!  do ipol = 1, 3
-!    dudk(1:npwx,1:nbnd,ipol) = (0.d0,0.d0)
+  do ipol = 1, 3
+    dudk(1:npwx,1:nbnd,ipol) = (0.d0,0.d0)
 
     ! loop over +/-1
-!    do sig = -1, 1, 2
+    do sig = -1, 1, 2
 
       ! compute overlaps
-!      do ibnd = 1, occ
-!        do jbnd = 1, occ
-!          call apply_eigr(sig, bg(:,ipol), psir(:,jbnd), aux)
-!          overlap(ibnd,jbnd) = dot_product(psir(:,ibnd), aux(:))/ &
-!                               dble(dffts%nr1x*dffts%nr2x*dffts%nr3x)
-!        enddo
-!      enddo
-!#ifdef __MPI
-!      call mp_sum( overlap, intra_pool_comm )   
-!#endif
+      do ibnd = 1, occ
+        do jbnd = 1, occ
+          call apply_eigr(sig, bg(:,ipol), psir(:,jbnd), aux)
+          overlap(ibnd,jbnd) = dot_product(psir(:,ibnd), aux(:))/ &
+                               dble(dffts%nr1x*dffts%nr2x*dffts%nr3x)
+        enddo
+      enddo
+#ifdef __MPI
+      call mp_sum( overlap, intra_pool_comm )   
+#endif
       
-!      call invert_matrix(occ, overlap)
+      call invert_matrix(occ, overlap)
       
       ! compute the covariant derivative
-!      do ibnd = 1, occ
-!        call apply_eigr(sig, bg(:,ipol), psir(:,ibnd), aux2(:,ibnd))
-!        CALL fwfft ('Wave', aux2(:,ibnd), dffts)
-!      enddo
+      do ibnd = 1, occ
+        call apply_eigr(sig, bg(:,ipol), psir(:,ibnd), aux2(:,ibnd))
+        CALL fwfft ('Wave', aux2(:,ibnd), dffts)
+      enddo
       ! 
-!      bmod = sum(bg(1:3,ipol)**2.d0 ) * tpiba      
+      bmod = sum(bg(1:3,ipol)**2.d0 ) * tpiba      
       !
-!      do ibnd = 1, occ
-!        do jbnd = 1, occ
-!          dudk(1:npw,ibnd,ipol) = dudk(1:npw,ibnd,ipol) + &
-!                        sig * 0.5d0/bmod * &
-!                        overlap(jbnd,ibnd) * aux2(nls(igk(1:npw)),jbnd)
-!        enddo
-!      enddo
+      do ibnd = 1, occ
+        do jbnd = 1, occ
+          dudk(1:npw,ibnd,ipol) = dudk(1:npw,ibnd,ipol) + &
+                        sig * 0.5d0/bmod * &
+                        overlap(jbnd,ibnd) * aux2(dffts%nl(igk_k(1:npw,ik)),jbnd)
+        enddo
+      enddo
       !
-!    enddo ! sig
-!  enddo ! ipol
-!  deallocate(psir, aux, aux2, overlap)
+    enddo ! sig
+  enddo ! ipol
+  deallocate(psir, aux, aux2, overlap)
 
-!END SUBROUTINE dudk_covariant_single_point_old
+END SUBROUTINE dudk_covariant_single_point_old
 
 
 
@@ -422,45 +436,45 @@ END SUBROUTINE invert_matrix
 !-----------------------------------------------------------------------
 ! apply e^(i G r) to a wavefunction in real space
 !-----------------------------------------------------------------------
-!SUBROUTINE apply_eigr(sig, gv, psi, res)
-!  USE kinds,     ONLY : dp
-!  USE constants, ONLY : tpi
-!  USE fft_base,  ONLY : dffts
-!  USE mp_global, ONLY : me_pool
-!  implicit none
-!  real(dp) :: gv(3), phase
-!  complex(dp) :: psi(dffts%nnr), res(dffts%nnr)
-!  integer :: sig, i1, i2, i3, itmp, izub, izlb, ir
-!  integer :: nr1s, nr2s, nr3s, nrx1s, nrx2s, nrx3s
+SUBROUTINE apply_eigr(sig, gv, psi, res)
+  USE kinds,     ONLY : dp
+  USE constants, ONLY : tpi
+  USE fft_base,  ONLY : dffts, dfftp
+  USE mp_global, ONLY : me_pool
+  implicit none
+  real(dp) :: gv(3), phase
+  complex(dp) :: psi(dffts%nnr), res(dffts%nnr)
+  integer :: sig, i1, i2, i3, itmp, izub, izlb, ir
+  integer :: nr1s, nr2s, nr3s, nrx1s, nrx2s, nrx3s
 
-!  nr1s = dffts%nr1;   nr2s = dffts%nr2;   nr3s = dffts%nr3
-!  nrx1s = dffts%nr1x; nrx2s = dffts%nr2x; nrx3s = dffts%nr3x
+  nr1s = dffts%nr1;   nr2s = dffts%nr2;   nr3s = dffts%nr3
+  nrx1s = dffts%nr1x; nrx2s = dffts%nr2x; nrx3s = dffts%nr3x
  
-!#ifdef __MPI
-!     izub=0
-!     do itmp=1,me_pool + 1
-!        izlb=izub+1
-!        izub=izub+dffts%npp(itmp)
-!     enddo
-!#else
-!     izlb=1
-!     izub=nr3s
-!#endif
+#ifdef __MPI
+     izub=0
+     do itmp=1,me_pool + 1
+        izlb=izub+1
+        izub=izub+dffts%nr3p(itmp)
+     enddo
+#else
+     izlb=1
+     izub=nr3s
+#endif
 
-!  do i1 = 1, nr1s
-!    do i2 = 1, nr2s
-!      do i3 = izlb, izub
-!        phase = sig* tpi * ( gv(1) * dble(i1)/dble(nr1s) + &
-!                             gv(2) * dble(i2)/dble(nr2s) + &
-!                             gv(3) * dble(i3)/dble(nr3s) )
-!        itmp = i3 - izlb + 1
-!        ir = i1 + (i2-1)*nrx1s + (itmp-1)*nrx1s*nrx2s
-!        res(ir) = cmplx(cos(phase),sin(phase)) * psi(ir) 
-!      enddo
-!    enddo
-!  enddo
+  do i1 = 1, nr1s
+    do i2 = 1, nr2s
+      do i3 = izlb, izub
+        phase = sig* tpi * ( gv(1) * dble(i1)/dble(nr1s) + &
+                             gv(2) * dble(i2)/dble(nr2s) + &
+                             gv(3) * dble(i3)/dble(nr3s) )
+        itmp = i3 - izlb + 1
+        ir = i1 + (i2-1)*nrx1s + (itmp-1)*nrx1s*nrx2s
+        res(ir) = cmplx(cos(phase),sin(phase)) * psi(ir) 
+      enddo
+    enddo
+  enddo
 
-!END SUBROUTINE apply_eigr
+END SUBROUTINE apply_eigr
 
 
 

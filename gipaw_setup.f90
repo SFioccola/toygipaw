@@ -30,7 +30,9 @@ SUBROUTINE gipaw_setup
   implicit none
   integer :: ik, ibnd
   real(dp) :: emin, emax, xmax, small, fac, target
-  
+
+  call start_clock ('gipaw_setup')
+   
   ! initialize pseudopotentials
   call init_us_1(nat, ityp, omega, ngm, g, gg, intra_bgrp_comm)
 
@@ -46,6 +48,9 @@ SUBROUTINE gipaw_setup
   call setlocal
   call plugin_scf_potential(rho, .false., -1d0)
   call set_vrs (vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, nspin, doublegrid)
+
+  call stop_clock('gipaw_setup')
+
 
 END SUBROUTINE gipaw_setup
 

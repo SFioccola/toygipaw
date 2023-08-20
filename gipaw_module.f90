@@ -72,7 +72,7 @@ MODULE gipaw_module
   ! diagonalization method
   INTEGER :: isolve
 
-  character(len=80) :: diagonalization, verbosity
+  character(len=80) :: diagonalization, verbosity, assume_isolated
  
   ! job: nmr, g_tensor, efg, hyperfine
   CHARACTER(80) :: job

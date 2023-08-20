@@ -319,6 +319,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   ind(:,2) = (/ 3, 1 /)
   ind(:,3) = (/ 1, 2 /)
 !  print*, 'chiama so valence'
+  call start_clock( 'add_so_valence' )
 
   !!RETURN
   ! compute (p+k)|psi> in real space
@@ -345,6 +346,8 @@ END SUBROUTINE vloc_psi_k_gipaw
         dvrs(i,current_spin,jj)*p_psic(i,ii) )
     enddo
   enddo
+
+  CALL stop_clock( 'add_so_valence' )
   END SUBROUTINE add_so_valence
 
 !---------------------------------------------------------------
@@ -374,6 +377,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   real(dp) :: sigma, alpha
 
 !  print*, 'chiama FrNL'
+  CALL start_clock( 'add_so_Fnl' )
 
   nrxxs = dffts%nnr
   nr1s=dffts%nr1
@@ -383,7 +387,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   nrx2s=dffts%nr2x
   nrx3s=dffts%nr3x
 
-!  print *, 'nbnd, m in Fnlr', paw_nkb, nbnd, m
+!  print *, 'nbndx, m in Fnlr', nbndx, m
   if (m > nbndx) call errore('add_so_Fnl', 'm > nbndx ???', m)
 !  !!if (m > nbnd) call errore('add_so_Fnl', 'm > nbnd ???', m)
   ALLOCATE (ps(paw_nkb,m))
@@ -445,6 +449,8 @@ END SUBROUTINE vloc_psi_k_gipaw
 
   deallocate (ps)
   deallocate (paw_becp4)
+
+  CALL stop_clock( 'add_so_Fnl' )
   END SUBROUTINE add_so_Fnl
 
 

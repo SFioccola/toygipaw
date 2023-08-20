@@ -63,7 +63,7 @@ SUBROUTINE compute_u_kq(ik, q)
      if (isolve == 1) then
         nbndx = nbnd ! CG
      elseif (isolve == 0) then
-        nbndx = 4*nbnd ! Davidson
+        nbndx = 6*nbnd ! Davidson
      else
         call errore('compute_u_kq', &
                 'Don''t even try to use this isolve!', abs(isolve))
@@ -95,7 +95,7 @@ SUBROUTINE compute_u_kq(ik, q)
   istep = 0
   max_cg_iter = 200
 !  ethr = conv_threshold
-  ethr = 1d-14
+  ethr = 1d-13
   lscf = .false.
 
   ! save eigenvalues

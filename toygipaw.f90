@@ -55,7 +55,7 @@ PROGRAM toygipaw
                         diagonalization, isolve, iverbosity, &
                         verbosity, q_gipaw, dudk_method, &
                         diago_thr_init, conv_threshold, &
-                        tr2, mixing_beta, &
+                        tr2, mixing_beta, assume_isolated, &
                         lambda_so
 
 ! begin with the initialization part                
@@ -88,6 +88,7 @@ if (.not. ionode .or. my_image_id > 0) goto 400
   lambda_so(:) = 0.d0
 
     read ( 5, input_toygipaw, iostat = ios )
+  tmp_dir = outdir
 
   ! further checks
   if (isolve /= -1) &
@@ -124,8 +125,10 @@ if (.not. ionode .or. my_image_id > 0) goto 400
 
   io_level = 1
   cell_factor = 1.1d0
+  call start_clock ('read_file')
   !read ground state wavefunctions  
   CALL read_file ( )
+  call stop_clock ('read_file')
 
   call gipaw_openfil ( )
 
@@ -136,7 +139,7 @@ if (.not. ionode .or. my_image_id > 0) goto 400
   call calc_orbital_magnetization ( )
   
   call environment_end(codename)
-!  call print_clock_gipaw
+  call print_clock_gipaw
   call stop_code( .true. )
 
   STOP
@@ -174,6 +177,7 @@ SUBROUTINE gipaw_bcast_input
   CALL mp_bcast ( mixing_beta, root, world_comm )
   CALL mp_bcast ( tr2, root, world_comm )
   CALL mp_bcast ( lambda_so, root, world_comm )
+  CALL mp_bcast ( assume_isolated, root, world_comm )
 
 
 END SUBROUTINE gipaw_bcast_input
@@ -205,3 +209,36 @@ SUBROUTINE gipaw_openfil
   CALL open_buffer( iunwfc, 'wfc', nwordwfc, io_level, exst )
 
 END SUBROUTINE gipaw_openfil
+
+!-----------------------------------------------------------------------
+SUBROUTINE print_clock_gipaw
+  !-----------------------------------------------------------------------
+  !
+  ! ... Print clocks
+  !
+  USE io_global,  ONLY : stdout
+  IMPLICIT NONE
+
+
+  write(stdout,*) '    Initialization:'
+  write(stdout,*)
+  call print_clock ('read_file')
+  call print_clock ('gipaw_setup')
+  call print_clock ('wfcinit')
+  call print_clock ('hinit0')
+  call print_clock ('potinit')
+  write(stdout,*)
+  write(stdout,*) '    SCF calculation:'
+  write(stdout,*)
+  call print_clock ('electrons')
+  call print_clock ('h_psi')
+  CALL print_clock( 'add_so_valence' )
+  call print_clock( 'add_so_Fnl' )
+  write(stdout,*)
+  write(stdout,*) '    g-tensor:'
+  write(stdout,*)
+  call print_clock ('compute_dudk')
+  call print_clock ('orbital_magnetization')
+
+END SUBROUTINE print_clock_gipaw
+

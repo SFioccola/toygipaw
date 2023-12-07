@@ -25,7 +25,7 @@ SUBROUTINE newscf
   USE control_flags, ONLY : restart, io_level, lscf, iprint, &
                             david, max_cg_iter, nexxiter, &
                             isolve, tr2, ethr, mixing_beta, nmix, niter, &
-                            iverbosity, do_makov_payne, ldftd3
+                            iverbosity, do_makov_payne, ldftd3, noinv
   USE extrapolation, ONLY : extrapolate_charge
   USE kinds,         ONLY : dp
   USE input_parameters, ONLY : startingpot, startingwfc, restart_mode
@@ -49,10 +49,8 @@ SUBROUTINE newscf
   REAL(DP), DIMENSION(dfftp%nnr,1) ::  rhotot, sign_r
   REAL(DP) :: exxen
   REAL(dp) :: ehomo, elumo ! highest occupied and lowest unoccupied levels
-  allocate (dvrs (dffts%nnr, nspin, 3))
-
   
-  
+  allocate (dvrs (dfftp%nnr, nspin, 3))  
   !  dft='starting from scratch'
   restart  =.false.
   io_level = 0
@@ -61,9 +59,9 @@ SUBROUTINE newscf
   doublegrid=.false.
   lmovecell=.false.
   iprint=10000
-!  starting_wfc='file'  ! read wfc from preav. scf
-!  starting_pot='file'  ! read potential from preav scf
-  starting_wfc='atomic' ! Initialization of wfc
+  starting_wfc='file'  ! read wfc from preav. scf
+  starting_pot='file'  ! read potential from preav scf
+!  starting_wfc='atomic' ! Initialization of wfc
   report=0
   CALL check_stop_init()
   CALL setup_para ( dfftp%nr3, 1, nbnd )
@@ -95,7 +93,7 @@ SUBROUTINE newscf
   !  since we use only Gamma we don't need symmetries
   !
   nsym=1
-  !
+  noinv=.true.
   ! these must be tuned for fast convergence
   !
   david = 6

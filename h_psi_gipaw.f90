@@ -6,7 +6,68 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------------------------
-SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
+SUBROUTINE h_psi_gipaw( lda, n, m, psi, hpsi )
+  !----------------------------------------------------------------------------
+  !! This routine computes the product of the Hamiltonian matrix with m 
+  !! wavefunctions contained in psi.
+  !
+  !! \(\textit{Wrapper routine}\): performs bgrp parallelization on 
+  !! non-distributed bands. If suitable and required, calls old H\psi 
+  !! routine h_psi_ .
+  !
+  USE kinds,              ONLY: DP
+  USE noncollin_module,   ONLY: npol
+  USE xc_lib,             ONLY: exx_is_active
+  USE mp_bands,           ONLY: use_bgrp_in_hpsi, inter_bgrp_comm, root_bgrp_id
+  USE mp,                 ONLY: mp_allgather, mp_size, &
+                                mp_type_create_column_section, mp_type_free, mp_bcast
+  !
+  IMPLICIT NONE
+  !
+  INTEGER, INTENT(IN) :: lda
+  !! leading dimension of arrays psi, spsi, hpsi
+  INTEGER, INTENT(IN) :: n
+  !! true dimension of psi, spsi, hpsi
+  INTEGER, INTENT(IN) :: m
+  !! number of states psi
+  COMPLEX(DP), INTENT(IN) :: psi(lda*npol,m)
+  !! the wavefunction
+  COMPLEX(DP), INTENT(OUT) :: hpsi(lda*npol,m)
+  !! Hamiltonian dot psi
+  !
+  ! ... local variables
+  !
+  INTEGER :: m_start, m_end
+  INTEGER :: column_type
+  INTEGER, ALLOCATABLE :: recv_counts(:), displs(:)
+  !
+  !
+  CALL start_clock( 'h_psi_bgrp' ); 
+!  write (*,*) 'start h_psi_bgrp'; FLUSH(6)
+  ! use band parallelization here
+     ALLOCATE( recv_counts(mp_size(inter_bgrp_comm)), displs(mp_size(inter_bgrp_comm)) )
+     CALL divide_all( inter_bgrp_comm, m, m_start, m_end, recv_counts,displs )
+     CALL mp_type_create_column_section( hpsi(1,1), 0, lda*npol, lda*npol, column_type )
+     !
+    ! print*, 'mp_size(inter_bgrp_comm',mp_size(inter_bgrp_comm)
+     ! Check if there at least one band in this band group
+     IF (m_end >= m_start) &
+        CALL h_psi_gipaw_( lda, n, m_end-m_start+1, psi(1,m_start), hpsi(1,m_start) )
+     CALL mp_allgather( hpsi, column_type, recv_counts, displs, inter_bgrp_comm )
+     !
+     CALL mp_type_free( column_type )
+     DEALLOCATE( recv_counts )
+     DEALLOCATE( displs )
+     !
+      CALL stop_clock( 'h_psi_bgrp' )
+  !
+  !
+  RETURN
+  !
+END SUBROUTINE h_psi_gipaw
+!
+!----------------------------------------------------------------------------
+SUBROUTINE h_psi_gipaw_ ( lda, n, m, psi, hpsi )
   !----------------------------------------------------------------------------
   !
   ! ... This routine computes the product of the Hamiltonian
@@ -38,7 +99,6 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   USE realus,   ONLY: real_space
   USE wvfct,    ONLY : g2kin, nbndx, nbnd
 #endif
-
   !
   IMPLICIT NONE
   !
@@ -58,6 +118,7 @@ SUBROUTINE h_psi_gipaw ( lda, n, m, psi, hpsi )
   nrx2s=dffts%nr2x
   nrx3s=dffts%nr3x
   !
+!  print*,'chiama h_psi_gipaw'
   CALL start_clock( 'h_psi' )
   !  
   CALL h_psi_k( )
@@ -319,8 +380,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   ind(:,2) = (/ 3, 1 /)
   ind(:,3) = (/ 1, 2 /)
 !  print*, 'chiama so valence'
-  call start_clock( 'add_so_valence' )
-
+  CALL start_clock( 'add_so_valence' )
   !!RETURN
   ! compute (p+k)|psi> in real space
   p_psic(1:dffts%nnr,1:3) = (0.d0,0.d0)
@@ -376,8 +436,8 @@ END SUBROUTINE vloc_psi_k_gipaw
   COMPLEX(DP) :: psi(lda,n), hpsi(lda,n)
   real(dp) :: sigma, alpha
 
-!  print*, 'chiama FrNL'
   CALL start_clock( 'add_so_Fnl' )
+!  print*, 'chiama FrNL'
 
   nrxxs = dffts%nnr
   nr1s=dffts%nr1
@@ -387,7 +447,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   nrx2s=dffts%nr2x
   nrx3s=dffts%nr3x
 
-!  print *, 'nbndx, m in Fnlr', nbndx, m
+!  print *, 'nbnd, m, nbndx, in Fnlr', nbnd, m, nbndx
   if (m > nbndx) call errore('add_so_Fnl', 'm > nbndx ???', m)
 !  !!if (m > nbnd) call errore('add_so_Fnl', 'm > nbnd ???', m)
   ALLOCATE (ps(paw_nkb,m))
@@ -449,9 +509,8 @@ END SUBROUTINE vloc_psi_k_gipaw
 
   deallocate (ps)
   deallocate (paw_becp4)
-
   CALL stop_clock( 'add_so_Fnl' )
   END SUBROUTINE add_so_Fnl
 
 
-END SUBROUTINE h_psi_gipaw
+END SUBROUTINE h_psi_gipaw_

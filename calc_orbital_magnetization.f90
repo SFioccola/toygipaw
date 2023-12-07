@@ -5,7 +5,7 @@
   USE io_files,              ONLY : nwordwfc, iunwfc
   USE wvfct,                 ONLY : npw, g2kin, nbnd, npwx, wg, et, &
                                    current_k
-  USE klist,                 ONLY : xk, nks, lgauss, igk_k, ngk
+  USE klist,                 ONLY : xk, nks, lgauss, igk_k, ngk, nkstot
   USE fft_base,              ONLY : dffts, dfftp
   USE cell_base,             ONLY : tpiba2, tpiba
   USE gvecw,                 ONLY : ecutwfc
@@ -25,7 +25,7 @@
   USE buffers,               ONLY : get_buffer
   USE scf,                   ONLY : vrs
   USE mp_global,             ONLY : my_pool_id
-  USE mp_bands,              ONLY : intra_bgrp_comm, inter_bgrp_comm
+  USE mp_bands,              ONLY : intra_bgrp_comm, inter_bgrp_comm, nbgrp
   USE mp_world,              ONLY : mpime, world_comm
   USE mp,                    ONLY : mp_barrier, mp_sum
   USE mp_pools,              ONLY : my_pool_id, me_pool, root_pool,  &
@@ -36,6 +36,7 @@
   USE uspp_init,             ONLY : init_us_2
   USE gvecw,                 ONLY : gcutw
   USE control_flags,         ONLY : iverbosity
+  USE mp_exx,                ONLY : init_index_over_band
   USE orbital_magnetization
 
   implicit none
@@ -53,13 +54,13 @@
   
   !debug mpi 
   integer :: ierr, num_procs, rank, root, i, dd, comm_rank
+  integer :: ibnd_start, ibnd_end
   real :: partial_value, gathered_kp_berry(6)
-
+!
+!
   ind(:,1) = (/ 2, 3 /)
   ind(:,2) = (/ 3, 1 /)
   ind(:,3) = (/ 1, 2 /)
-
-!  print*, 'chiama calc_orb_magn'
 
   ! various initializations:
   nrxxs = dffts%nnr
@@ -70,7 +71,7 @@
   do ik = 1, nks
     npw = ngk (ik) !number of plane waves for each k point
   enddo
-  
+  !
   delta_k = q_gipaw/tpiba
    
 !  compute the covariant derivatives
@@ -80,13 +81,12 @@
   allocate (dudk_bra(npwx,nbnd), dudk_ket(npwx,nbnd), hpsi(npwx))
     ! zero the accumulators
 #if defined(__MPI)
-!  CALL mp_barrier(world_comm)  ! ne ho bisogno?
+ ! CALL mp_barrier(inter_bgrp_comm)  ! ne ho bisogno?
 #endif
-  
-  call start_clock ('orbital_magnetization')
-  
-  write(stdout,*)
+
+write(stdout,*)
   write(stdout,'(5X,''Computing the orbital magnetization (bohr mag/cell):'')')
+  call start_clock ('orbital_magnetization')
   berry_curvature = 0.d0
   orb_magn_LC = 0.d0
   orb_magn_IC = 0.d0
@@ -101,18 +101,18 @@
 #define __USE_BARRIER
    
   CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin ) 
-
+  call start_clock('loop over k-points')
    ! loop over k-points
   do ik = 1, nks
     npw = ngk(ik)
     call find_nbnd_occ(ik, occ, emin, emax)
     if (lgauss) occ = nbnd
-
+    !
     ! setup the hamiltonian
     current_k = ik
     current_spin = 1
     if (lsda) current_spin = isk(ik)
-     CALL gk_sort( xk(1,ik), ngm, g, gcutw, ngk(ik), igk_k(1,ik), g2kin )
+    CALL gk_sort( xk(1,ik), ngm, g, gcutw, ngk(ik), igk_k(1,ik), g2kin )
      g2kin(1:ngk(ik)) = g2kin(1:ngk(ik)) * tpiba2
     call get_buffer(evc, nwordwfc, iunwfc, ik)
     if (nkb > 0) then
@@ -128,12 +128,14 @@
 
     call compute_dbecp  ! for deltaM bare
     call compute_paw_dbecp ! for delta_M_para_so
-
+   
+    call start_clock('loop over direc')
     ! loop over the magnetization directions
     do kk =  1, 3
       ii = ind(1,kk)
       jj = ind(2,kk)
       ! read the bra and the ket
+
       call davcio(dudk_bra, 2*nwordwfc, iundudk1 + ii - 1, ik, -1)
       call davcio(dudk_ket, 2*nwordwfc, iundudk1 + jj - 1, ik, -1)
       
@@ -150,7 +152,6 @@
         kp_M_IC(kk) = kp_M_IC(kk) + 2.d0*wg(ibnd,ik)*et(ibnd,ik)*imag(braket)
         orb_magn_IC(kk) = orb_magn_IC(kk) + &
                          2.d0*wg(ibnd,ik)*et(ibnd,ik)*imag(braket)
-
         ! this is the LC term
         call h_psi_gipaw(npwx, ngk(ik), 1, dudk_ket(1:npwx,ibnd), hpsi)
         braket = zdotc(ngk(ik), dudk_bra(1,ibnd), 1, hpsi, 1)
@@ -167,16 +168,19 @@
       call calc_delta_M_bare
       if (any(lambda_so /= 0.d0)) call calc_delta_M_para_so
     enddo ! kk
+    call stop_clock('loop over direc')
     ! Parallel reductions
 #ifdef __MPI
-  call mp_sum( kp_berry, intra_pool_comm )
+!  
+  call mp_sum( kp_berry, intra_pool_comm ) ! reduce over G-vectors
   call mp_sum( kp_M_LC, intra_pool_comm )
   call mp_sum( kp_M_IC, intra_pool_comm )
-  call mp_sum( kp_berry, inter_pool_comm )
-  call mp_sum( kp_M_LC, inter_pool_comm )
-  call mp_sum( kp_M_IC, inter_pool_comm )
 #endif
-  
+    !
+    kp_berry = kp_berry*nbgrp
+    kp_M_LC  = kp_M_LC*nbgrp
+    kp_M_IC  = kp_M_IC*nbgrp
+    !
     if (me_pool == root_pool) then
       write(*,'(''BC: k-point:'',I5,2X,''pool:'',I4,4X,9F12.6)') ik, my_pool_id+1, kp_berry
       write(*,'(''LC: k-point:'',I5,2X,''pool:'',I4,4X,9F12.6)') ik, my_pool_id+1, kp_M_LC*rydtohar
@@ -185,18 +189,19 @@
 !            ik, my_pool_id+1, xk(:,ik), kp_berry, kp_M_LC*rydtohar, kp_M_IC*rydtohar
     endif
   enddo !ik
+ call stop_clock('loop over k-points')
   
 #ifdef __MPI
  ! no reduction for delta_M_bare and delta_M_para and delta_M_dia
+ ! 
   call mp_sum(orb_magn_LC, intra_pool_comm )
   call mp_sum(orb_magn_IC, intra_pool_comm )
   call mp_sum(berry_curvature, intra_pool_comm )
-  call mp_sum(orb_magn_LC, inter_pool_comm )
-  call mp_sum(orb_magn_IC, inter_pool_comm )
-  call mp_sum(berry_curvature, inter_pool_comm )
 #endif
-  
   ! no reduction for delta_M_bare and delta_M_para and delta_M_dia 
+  orb_magn_LC = orb_magn_LC*nbgrp
+  orb_magn_IC = orb_magn_IC*nbgrp
+  berry_curvature = berry_curvature*nbgrp
 
 
   ! close files
@@ -245,7 +250,7 @@
   close(unit=iundudk1)
   close(unit=iundudk2)
   close(unit=iundudk3)
-  
+
   call stop_clock ('orbital_magnetization')
   ! go on, reporting the g-tensor
   if (any(lambda_so /= 0.d0)) call calc_g_tensor(orb_magn_tot)
@@ -315,6 +320,8 @@
     complex(dp) :: tmp, becp_product
     integer :: ibnd, ijkb0, nt, na, jh, jkb, ih, ikb
     integer :: nbs1, nbs2, l1, l2
+
+    call start_clock('delta_M_bare')
     if (nkb == 0) return
     tmp = (0.d0,0.d0)
     ijkb0 = 0
@@ -344,6 +351,7 @@
     !PRINT*, mpime, kk, -2.d0*tmp
     ! check the sign and real or imag!!
     delta_M_bare(kk) = delta_M_bare(kk) - 2.d0*imag(tmp)
+    call stop_clock('delta_M_bare')
     END SUBROUTINE calc_delta_M_bare
 
 
@@ -364,6 +372,7 @@
     integer :: ibnd, ijkb0, nt, na, jh, jkb, ih, ikb
     integer :: l1, m1, lm1, l2, m2, lm2, nbs1, nbs2
     real(dp) :: sigma
+    call start_clock('delta_M_para')
     if (paw_nkb == 0) return
     sigma = 1.d0; if (current_spin == 2) sigma = -1.d0
     tmp = (0.d0,0.d0)
@@ -410,6 +419,7 @@
     !PRINT*, kk, tmp
     ! check the sign and real or imag!!
     delta_M_para(kk) = delta_M_para(kk) - 2.d0*imag(tmp)
+    call stop_clock('delta_M_para')
     END SUBROUTINE calc_delta_M_para_so
 
     !------------------------------------------------------------------
@@ -431,6 +441,7 @@
     complex(dp) :: bec_product
     complex(dp), allocatable :: dia_corr(:)
     real(dp) :: diamagnetic_tensor(3,3), sigma
+    call start_clock('delta_M_dia')
     lmaxx2 = 3
     if (paw_nkb == 0) return
     sigma = 1.d0; if (current_spin == 2) sigma = -1.d0
@@ -516,6 +527,7 @@
     delta_M_dia = delta_M_dia + (gprime/4.d0)*0.5d0*sigma &
                                  *matmul(diamagnetic_tensor, lambda_so)
 
+    call stop_clock('delta_M_dia')
     END SUBROUTINE calc_delta_M_dia_so
 
   !-----------------------------------------------------------------------
@@ -536,6 +548,8 @@
   USE gvecw,                ONLY : gcutw
   USE paw_gipaw,            ONLY : paw_vkb, paw_nkb, paw_recon, paw_lmaxkb, &
                                    paw_becp
+  USE mp_exx,                ONLY : init_index_over_band
+  USE mp_bands,              ONLY : intra_bgrp_comm, inter_bgrp_comm
   implicit none
   real(dp), parameter :: rydtohar = 0.5d0
   real(dp) :: orb_magn_tot(3)
@@ -550,6 +564,10 @@
   delta_rmc_gipaw = 0.d0
 
   do ik = 1, nks
+  !
+!  CALL divide( intra_bgrp_comm, nbnd, ibnd_start, ibnd_end )
+!  CALL init_index_over_band( intra_bgrp_comm, nbnd, nbnd )
+  !
     call get_buffer(evc, nwordwfc, iunwfc, ik)
 
     current_k = ik
@@ -575,22 +593,13 @@
     delta_rmc_gipaw = delta_rmc_gipaw + s_weight * tmp
 
   enddo
-!#ifdef __PARA
-!  call reduce(1, delta_rmc)
-!  ! no reduction for delta_rmc_gipaw
-!  call poolreduce(1, delta_rmc)
-!  call poolreduce(1, delta_rmc_gipaw)
-!#endif
 #if defined(__MPI)
-  CALL mp_sum( delta_rmc, intra_bgrp_comm )
-!  CALL mp_sum( kp_M_LC, intra_bgrp_comm )
-!  CALL mp_sum( kp_M_IC, intra_bgrp_comm )
+  CALL mp_sum( delta_rmc, intra_pool_comm )
 #endif
 
 
-  delta_rmc = delta_rmc * rydtohar * alpha**2.d0 * g_e * 1d6
+  delta_rmc = delta_rmc * rydtohar * alpha**2.d0 * g_e * 1d6/nbgrp
   delta_rmc_gipaw = delta_rmc_gipaw * rydtohar * alpha**2.d0 * g_e * 1d6
-
   ! report results
   lambda_mod = sqrt(sum(lambda_so(:)**2.d0))
   delta_g_orb_magn = orb_magn_tot/lambda_mod * 1d6
@@ -666,6 +675,7 @@
     enddo
   enddo
   rmc_gipaw = -real(rmc_corr,dp)
+
   END SUBROUTINE relativistic_mass_correction
 
 

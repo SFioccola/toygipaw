@@ -18,7 +18,7 @@ SUBROUTINE h_psi_gipaw( lda, n, m, psi, hpsi )
   USE kinds,              ONLY: DP
   USE noncollin_module,   ONLY: npol
   USE xc_lib,             ONLY: exx_is_active
-  USE mp_bands,           ONLY: use_bgrp_in_hpsi, inter_bgrp_comm, root_bgrp_id
+  USE mp_bands,           ONLY: use_bgrp_in_hpsi, inter_bgrp_comm, root_bgrp_id, intra_bgrp_comm
   USE mp,                 ONLY: mp_allgather, mp_size, &
                                 mp_type_create_column_section, mp_type_free, mp_bcast
   !
@@ -53,6 +53,7 @@ SUBROUTINE h_psi_gipaw( lda, n, m, psi, hpsi )
      ! Check if there at least one band in this band group
      IF (m_end >= m_start) &
         CALL h_psi_gipaw_( lda, n, m_end-m_start+1, psi(1,m_start), hpsi(1,m_start) )
+!        CALL h_psi_gipaw_( )
      CALL mp_allgather( hpsi, column_type, recv_counts, displs, inter_bgrp_comm )
      !
      CALL mp_type_free( column_type )

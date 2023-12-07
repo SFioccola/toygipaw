@@ -52,8 +52,6 @@ SUBROUTINE compute_u_kq(ik, q)
   logical :: q_is_zero
 
   CALL start_clock( 'c_bands' )
-
-  !
   !
   !
   IF (.NOT.allocated(btype)) THEN
@@ -79,8 +77,6 @@ SUBROUTINE compute_u_kq(ik, q)
      do jk = 1, nks
         btype(1:nbnd_occ(jk), jk) = 1
      enddo
-
-!     btype(:,:) = 1
 
   ENDIF
 

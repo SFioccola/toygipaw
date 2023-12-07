@@ -108,6 +108,8 @@ write(stdout,*)
     call find_nbnd_occ(ik, occ, emin, emax)
     if (lgauss) occ = nbnd
     !
+!    call divide(inter_bgrp_comm, occ, ibnd_start, ibnd_end)
+    !
     ! setup the hamiltonian
     current_k = ik
     current_spin = 1
@@ -144,6 +146,7 @@ write(stdout,*)
       kp_M_IC(kk) = 0.d0
       kp_M_LC(kk) = 0.d0
       do ibnd = 1, occ
+!      do ibnd = ibnd_start, ibnd_end
        ! IC term and Berry curvature
         braket = zdotc(ngk(ik), dudk_bra(1,ibnd), 1, dudk_ket(1,ibnd), 1)
         kp_berry(kk) = kp_berry(kk) + 2.d0*wg(ibnd,ik)*imag(braket)
@@ -172,14 +175,14 @@ write(stdout,*)
     ! Parallel reductions
 #ifdef __MPI
 !  
-  call mp_sum( kp_berry, intra_pool_comm ) ! reduce over G-vectors
-  call mp_sum( kp_M_LC, intra_pool_comm )
-  call mp_sum( kp_M_IC, intra_pool_comm )
+  call mp_sum( kp_berry, intra_bgrp_comm )
+  call mp_sum( kp_M_LC, intra_bgrp_comm )
+  call mp_sum( kp_M_IC, intra_bgrp_comm )
+!  call mp_sum( kp_berry, inter_bgrp_comm )
+!  call mp_sum( kp_M_LC, inter_bgrp_comm )
+!  call mp_sum( kp_M_IC, inter_bgrp_comm )
 #endif
     !
-    kp_berry = kp_berry*nbgrp
-    kp_M_LC  = kp_M_LC*nbgrp
-    kp_M_IC  = kp_M_IC*nbgrp
     !
     if (me_pool == root_pool) then
       write(*,'(''BC: k-point:'',I5,2X,''pool:'',I4,4X,9F12.6)') ik, my_pool_id+1, kp_berry
@@ -194,15 +197,14 @@ write(stdout,*)
 #ifdef __MPI
  ! no reduction for delta_M_bare and delta_M_para and delta_M_dia
  ! 
-  call mp_sum(orb_magn_LC, intra_pool_comm )
-  call mp_sum(orb_magn_IC, intra_pool_comm )
-  call mp_sum(berry_curvature, intra_pool_comm )
+  call mp_sum(orb_magn_LC, intra_bgrp_comm )
+  call mp_sum(orb_magn_IC, intra_bgrp_comm )
+  call mp_sum(berry_curvature, intra_bgrp_comm )
+!  call mp_sum(orb_magn_LC, inter_bgrp_comm )
+!  call mp_sum(orb_magn_IC, inter_bgrp_comm )
+!  call mp_sum(berry_curvature, inter_bgrp_comm )
 #endif
   ! no reduction for delta_M_bare and delta_M_para and delta_M_dia 
-  orb_magn_LC = orb_magn_LC*nbgrp
-  orb_magn_IC = orb_magn_IC*nbgrp
-  berry_curvature = berry_curvature*nbgrp
-
 
   ! close files
   close(unit=iundudk1, status='keep')
@@ -594,11 +596,11 @@ write(stdout,*)
 
   enddo
 #if defined(__MPI)
-  CALL mp_sum( delta_rmc, intra_pool_comm )
+  CALL mp_sum( delta_rmc, intra_bgrp_comm )
 #endif
 
 
-  delta_rmc = delta_rmc * rydtohar * alpha**2.d0 * g_e * 1d6/nbgrp
+  delta_rmc = delta_rmc * rydtohar * alpha**2.d0 * g_e * 1d6!/nbgrp
   delta_rmc_gipaw = delta_rmc_gipaw * rydtohar * alpha**2.d0 * g_e * 1d6
   ! report results
   lambda_mod = sqrt(sum(lambda_so(:)**2.d0))

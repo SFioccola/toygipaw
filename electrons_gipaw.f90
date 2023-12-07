@@ -831,6 +831,7 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
            ! ... to ensure consistency on all processors of all pools
            IF (noncolin) THEN
               IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
+              IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_bgrp_comm )
            ELSE
               IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
            ENDIF
@@ -1781,7 +1782,8 @@ FUNCTION exxenergyace( )
      exxenergyace = exxenergyace + ex
   ENDDO
   !
-  CALL mp_sum( exxenergyace, inter_pool_comm )
+!  CALL mp_sum( exxenergyace, inter_pool_comm )
+  CALL mp_sum( exxenergyace, intra_bgrp_comm )
   !
   domat = .FALSE.
   !

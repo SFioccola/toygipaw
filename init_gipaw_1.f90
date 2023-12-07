@@ -27,9 +27,9 @@ SUBROUTINE init_gipaw_1
   USE uspp,        ONLY : aainit
   USE atom,        ONLY : rgrid, msh
   USE io_global,   ONLY : stdout
-#ifdef __BANDS
+!#ifdef __BANDS
   USE mp_bands,    ONLY : intra_bgrp_comm, inter_bgrp_comm
-#endif
+!#endif
   USE matrix_inversion
   USE mp_pools,    ONLY : intra_pool_comm
   USE mp,          ONLY : mp_sum
@@ -220,7 +220,8 @@ SUBROUTINE init_gipaw_1
   
   ! fill the interpolation table tab
   pref = fpi / sqrt ( omega )
-  call divide (intra_pool_comm, nqx, startq, lastq)
+!  call divide (intra_pool_comm, nqx, startq, lastq)
+  call divide (intra_bgrp_comm, nqx, startq, lastq)
   do nt = 1, ntyp
      paw_recon(nt)%paw_tab (:,:) = 0.d0
      do nb = 1, paw_recon(nt)%paw_nbeta
@@ -238,12 +239,12 @@ SUBROUTINE init_gipaw_1
      enddo
   
 #ifdef __MPI
-#  ifdef __BANDS
+!#  ifdef __BANDS
      call mp_sum ( paw_recon(nt)%paw_tab(:,:), intra_bgrp_comm )
-     call mp_sum ( paw_recon(nt)%paw_tab(:,:), inter_bgrp_comm )
-#  else
-     call mp_sum ( paw_recon(nt)%paw_tab(:,:), intra_pool_comm )
-#  endif
+!     call mp_sum ( paw_recon(nt)%paw_tab(:,:), inter_bgrp_comm )
+!#  else
+!     call mp_sum ( paw_recon(nt)%paw_tab(:,:), intra_pool_comm )
+!#  endif
 #endif
 
   enddo

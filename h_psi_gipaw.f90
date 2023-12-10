@@ -18,9 +18,9 @@ SUBROUTINE h_psi_gipaw( lda, n, m, psi, hpsi )
   USE kinds,              ONLY: DP
   USE noncollin_module,   ONLY: npol
   USE xc_lib,             ONLY: exx_is_active
-  USE mp_bands,           ONLY: use_bgrp_in_hpsi, inter_bgrp_comm, root_bgrp_id, intra_bgrp_comm
+  USE mp_bands,           ONLY: use_bgrp_in_hpsi, inter_bgrp_comm
   USE mp,                 ONLY: mp_allgather, mp_size, &
-                                mp_type_create_column_section, mp_type_free, mp_bcast
+                                mp_type_create_column_section, mp_type_free
   !
   IMPLICIT NONE
   !
@@ -42,25 +42,38 @@ SUBROUTINE h_psi_gipaw( lda, n, m, psi, hpsi )
   INTEGER, ALLOCATABLE :: recv_counts(:), displs(:)
   !
   !
-  CALL start_clock( 'h_psi_bgrp' ); 
-!  write (*,*) 'start h_psi_bgrp'; FLUSH(6)
-  ! use band parallelization here
+  CALL start_clock( 'h_psi_bgrp' ); !write (*,*) 'start h_psi_bgrp'; FLUSH(6)
+  !
+  ! band parallelization with non-distributed bands is performed if
+  ! 1. enabled (variable use_bgrp_in_hpsi must be set to .T.)
+  ! 2. exact exchange is not active (if it is, band parallelization is already
+  !    used in exx routines called by Hpsi)
+  ! 3. there is more than one band, otherwise there is nothing to parallelize
+  !
+  use_bgrp_in_hpsi = .true.
+  IF (use_bgrp_in_hpsi .AND. m > 1) THEN
+     !
+     ! use band parallelization here
      ALLOCATE( recv_counts(mp_size(inter_bgrp_comm)), displs(mp_size(inter_bgrp_comm)) )
      CALL divide_all( inter_bgrp_comm, m, m_start, m_end, recv_counts,displs )
      CALL mp_type_create_column_section( hpsi(1,1), 0, lda*npol, lda*npol, column_type )
      !
-    ! print*, 'mp_size(inter_bgrp_comm',mp_size(inter_bgrp_comm)
      ! Check if there at least one band in this band group
      IF (m_end >= m_start) &
         CALL h_psi_gipaw_( lda, n, m_end-m_start+1, psi(1,m_start), hpsi(1,m_start) )
-!        CALL h_psi_gipaw_( )
      CALL mp_allgather( hpsi, column_type, recv_counts, displs, inter_bgrp_comm )
      !
      CALL mp_type_free( column_type )
      DEALLOCATE( recv_counts )
      DEALLOCATE( displs )
      !
-      CALL stop_clock( 'h_psi_bgrp' )
+  ELSE
+     ! don't use band parallelization here
+     CALL h_psi_gipaw_( lda, n, m, psi, hpsi )
+     !
+  ENDIF
+  !
+  CALL stop_clock( 'h_psi_bgrp' )
   !
   !
   RETURN
@@ -100,6 +113,7 @@ SUBROUTINE h_psi_gipaw_ ( lda, n, m, psi, hpsi )
   USE realus,   ONLY: real_space
   USE wvfct,    ONLY : g2kin, nbndx, nbnd
 #endif
+
   !
   IMPLICIT NONE
   !
@@ -119,7 +133,6 @@ SUBROUTINE h_psi_gipaw_ ( lda, n, m, psi, hpsi )
   nrx2s=dffts%nr2x
   nrx3s=dffts%nr3x
   !
-!  print*,'chiama h_psi_gipaw'
   CALL start_clock( 'h_psi' )
   !  
   CALL h_psi_k( )
@@ -381,7 +394,8 @@ END SUBROUTINE vloc_psi_k_gipaw
   ind(:,2) = (/ 3, 1 /)
   ind(:,3) = (/ 1, 2 /)
 !  print*, 'chiama so valence'
-  CALL start_clock( 'add_so_valence' )
+  call start_clock( 'add_so_valence' )
+
   !!RETURN
   ! compute (p+k)|psi> in real space
   p_psic(1:dffts%nnr,1:3) = (0.d0,0.d0)
@@ -437,8 +451,8 @@ END SUBROUTINE vloc_psi_k_gipaw
   COMPLEX(DP) :: psi(lda,n), hpsi(lda,n)
   real(dp) :: sigma, alpha
 
-  CALL start_clock( 'add_so_Fnl' )
 !  print*, 'chiama FrNL'
+  CALL start_clock( 'add_so_Fnl' )
 
   nrxxs = dffts%nnr
   nr1s=dffts%nr1
@@ -448,7 +462,7 @@ END SUBROUTINE vloc_psi_k_gipaw
   nrx2s=dffts%nr2x
   nrx3s=dffts%nr3x
 
-!  print *, 'nbnd, m, nbndx, in Fnlr', nbnd, m, nbndx
+!  print *, 'nbndx, m in Fnlr', nbndx, m
   if (m > nbndx) call errore('add_so_Fnl', 'm > nbndx ???', m)
 !  !!if (m > nbnd) call errore('add_so_Fnl', 'm > nbnd ???', m)
   ALLOCATE (ps(paw_nkb,m))
@@ -510,6 +524,7 @@ END SUBROUTINE vloc_psi_k_gipaw
 
   deallocate (ps)
   deallocate (paw_becp4)
+
   CALL stop_clock( 'add_so_Fnl' )
   END SUBROUTINE add_so_Fnl
 

@@ -49,8 +49,10 @@ SUBROUTINE newscf
   REAL(DP), DIMENSION(dfftp%nnr,1) ::  rhotot, sign_r
   REAL(DP) :: exxen
   REAL(dp) :: ehomo, elumo ! highest occupied and lowest unoccupied levels
+  allocate (dvrs (dfftp%nnr, nspin, 3))
+
   
-  allocate (dvrs (dfftp%nnr, nspin, 3))  
+  
   !  dft='starting from scratch'
   restart  =.false.
   io_level = 0
@@ -94,6 +96,7 @@ SUBROUTINE newscf
   !
   nsym=1
   noinv=.true.
+  !
   ! these must be tuned for fast convergence
   !
   david = 6
@@ -111,7 +114,7 @@ SUBROUTINE newscf
   call hinit0 ( )
   call potinit ( )
   
-  CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin )
+  CALL set_dvrs( dvrs, vrs, dfftp%nnr, nspin )
 
   call newd ( )
   call wfcinit_gipaw ( )

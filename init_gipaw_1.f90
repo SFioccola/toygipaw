@@ -27,9 +27,7 @@ SUBROUTINE init_gipaw_1
   USE uspp,        ONLY : aainit
   USE atom,        ONLY : rgrid, msh
   USE io_global,   ONLY : stdout
-!#ifdef __BANDS
   USE mp_bands,    ONLY : intra_bgrp_comm, inter_bgrp_comm
-!#endif
   USE matrix_inversion
   USE mp_pools,    ONLY : intra_pool_comm
   USE mp,          ONLY : mp_sum
@@ -239,12 +237,9 @@ SUBROUTINE init_gipaw_1
      enddo
   
 #ifdef __MPI
-!#  ifdef __BANDS
      call mp_sum ( paw_recon(nt)%paw_tab(:,:), intra_bgrp_comm )
 !     call mp_sum ( paw_recon(nt)%paw_tab(:,:), inter_bgrp_comm )
-!#  else
 !     call mp_sum ( paw_recon(nt)%paw_tab(:,:), intra_pool_comm )
-!#  endif
 #endif
 
   enddo

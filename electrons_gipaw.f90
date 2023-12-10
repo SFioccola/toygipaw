@@ -830,10 +830,11 @@ SUBROUTINE electrons_scf_gipaw ( printout, exxen )
            ! ... For DFT+U, ns and ns_nc are also broadcast inside each pool
            ! ... to ensure consistency on all processors of all pools
            IF (noncolin) THEN
-              IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
+!              IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
               IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_bgrp_comm )
            ELSE
-              IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
+!              IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
+              IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_bgrp_comm )
            ENDIF
            ! DFT+U+V: this variable is not in "mix-type" variable rhoin
            IF (lda_plus_u_kind.EQ.2) THEN
@@ -1782,8 +1783,7 @@ FUNCTION exxenergyace( )
      exxenergyace = exxenergyace + ex
   ENDDO
   !
-!  CALL mp_sum( exxenergyace, inter_pool_comm )
-  CALL mp_sum( exxenergyace, intra_bgrp_comm )
+  CALL mp_sum( exxenergyace, inter_pool_comm )
   !
   domat = .FALSE.
   !

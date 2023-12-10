@@ -115,7 +115,7 @@ END SUBROUTINE compute_dudk_new
   real(dp) :: q_gipaw3(3), delta_k
   integer :: ik, i, occ, sig 
   integer :: ibnd, jbnd, ipol
-  integer :: ibnd_start, ibnd_end
+
   if (occ == 0) return
 
   ! allocate/initialize  overlap matrix and dudk
@@ -151,6 +151,7 @@ END SUBROUTINE compute_dudk_new
       enddo
 
 #ifdef __MPI
+!      call mp_sum( overlap, intra_pool_comm )   
       call mp_sum( overlap, intra_bgrp_comm )   
 #endif
       call invert_matrix(occ, overlap) 
@@ -229,8 +230,8 @@ SUBROUTINE dudk_covariant_single_point(ik, occ, dudk)
   USE fft_base,         ONLY : dffts
   USE fft_interfaces,   ONLY : fwfft, invfft
   USE mp_global,        ONLY : intra_pool_comm 
+  USE mp_bands,         ONLY : intra_bgrp_comm, inter_bgrp_comm
   USE mp,               ONLY : mp_sum
-  USE mp_bands,             ONLY : intra_bgrp_comm, inter_bgrp_comm
   USE gipaw_module,     ONLY : evq
   implicit none
   complex(dp), external :: zdotc
@@ -284,6 +285,7 @@ SUBROUTINE dudk_covariant_single_point(ik, occ, dudk)
       enddo
 
 #ifdef __MPI
+!      call mp_sum( overlap, intra_pool_comm )   
       call mp_sum( overlap, intra_bgrp_comm )   
 #endif
       call invert_matrix(occ, overlap) 
@@ -323,8 +325,8 @@ SUBROUTINE dudk_covariant_single_point_old(ik, occ, dudk)
   USE io_files,             ONLY : nwordatwfc, iunsat, iunwfc, nwordwfc
 !  USE ldaU,                 ONLY : lda_plus_u, swfcatom
   USE mp_global,            ONLY : intra_pool_comm  !, inter_pool_comm, nproc, npool
-  USE mp,                   ONLY : mp_sum
   USE mp_bands,             ONLY : intra_bgrp_comm, inter_bgrp_comm
+  USE mp,                   ONLY : mp_sum
   USE buffers,   ONLY : get_buffer, save_buffer
   USE gipaw_module,     ONLY : evq
   implicit none
@@ -332,15 +334,11 @@ SUBROUTINE dudk_covariant_single_point_old(ik, occ, dudk)
   complex(dp), allocatable :: psir(:,:), aux(:), aux2(:,:)
   complex(dp) :: dudk(npwx,nbnd,3)
   integer :: ibnd, jbnd, ipol
-  integer :: ibnd_start, ibnd_end
   complex(dp), allocatable :: overlap(:,:)
   real(dp) :: bmod, q_gipaw3(3)
 
   if (occ == 0) return
 
-  !
-!  call divide(inter_bgrp_comm, occ, ibnd_start, ibnd_end)
-  !
   nrxxs = dffts%nnr
 
 ! ! allocate real space wfcs
@@ -351,8 +349,7 @@ SUBROUTINE dudk_covariant_single_point_old(ik, occ, dudk)
   ! IF ( lda_plus_u ) CALL davcio( swfcatom, nwordatwfc, iunsat, ik, -1 )
   
   ! transform to real space
-!  do ibnd = 1, occ
-  do ibnd = ibnd_start, ibnd_end
+  do ibnd = 1, occ
     aux(1:nrxxs) = (0.d0, 0.d0)
     aux(dffts%nl(igk_k(1:npw,ik))) = evc(1:npw,ibnd)
     CALL invfft ('Wave', aux, dffts)
@@ -378,8 +375,8 @@ SUBROUTINE dudk_covariant_single_point_old(ik, occ, dudk)
         enddo
       enddo
 #ifdef __MPI
+!      call mp_sum( overlap, intra_pool_comm )   
       call mp_sum( overlap, intra_bgrp_comm )   
-      call mp_sum( overlap, inter_bgrp_comm )   
 #endif
       
       call invert_matrix(occ, overlap)

@@ -49,7 +49,7 @@ SUBROUTINE rotate_wfc_gipaw ( npwx, npw, nstart, gstart, nbnd, psi, npol, overla
   !     calculates S|psi> (if needed)
   !     Vectors psi,hpsi,spsi are dimensioned (npwx,npol,nvec)
   !
-!  print*, 'chiama rotat_wfc_gipaw'
+  ! print*, 'chiama rotat_wfc_gipaw'
   CALL start_clock( 'wfcrot' ); !write (*,*) 'start wfcrot' ; FLUSH(6)
   !write (*,*) 'gamma_only' , gamma_only; FLUSH(6)
   !

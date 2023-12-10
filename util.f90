@@ -125,9 +125,7 @@ SUBROUTINE select_spin(s_min, s_maj)
   USE kinds,        ONLY : dp
   USE scf,          ONLY : rho
   USE lsda_mod,     ONLY : nspin
-#ifdef __BANDS
   USE mp_bands,     ONLY : intra_bgrp_comm
-#endif
   USE mp_pools,     ONLY : intra_pool_comm
   USE mp,           ONLY : mp_sum
   USE cell_base,    ONLY : omega
@@ -147,11 +145,10 @@ SUBROUTINE select_spin(s_min, s_maj)
   ! calculate spin magnetization
   nrxx = dfftp%nnr
   rho_diff = sum(rho%of_r(1:nrxx,1) - rho%of_r(1:nrxx,nspin))
-#ifdef __BANDS
-  ! siamo sicuri di questo comunicatore?
+!#ifdef __BANDS
+#ifdef __MPI
   call mp_sum(rho_diff, intra_bgrp_comm)
-#else
-  call mp_sum(rho_diff, intra_pool_comm)
+!  call mp_sum(rho_diff, intra_pool_comm)
 #endif
   rho_diff = rho_diff * omega / (dfftp%nr1*dfftp%nr2*dfftp%nr3)
 

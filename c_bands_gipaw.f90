@@ -271,7 +271,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
   COMPLEX (DP), POINTER :: hevc(:,:), sevc(:,:)
   !
   ! Davidson and RMM-DIIS diagonalization uses these external routines on groups of nvec bands
-  EXTERNAL h_psi_gipaw, s_psi, g_psi
+  EXTERNAL h_psi_gipaw, s_psi, g_psi, h_psi_gipaw_
   EXTERNAL h_psi_gpu, s_psi_gpu, g_psi_gpu
   ! subroutine h_psi(npwx,npw,nvec,psi,hpsi)  computes H*psi
   ! subroutine s_psi(npwx,npw,nvec,psi,spsi)  computes S*psi (if needed)
@@ -297,8 +297,8 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
   external g_1psi
   external g_1psi_gpu
   ALLOCATE( h_diag( npwx, npol ), STAT=ierr )
-!  print*, 'chiama diag_bands_gipaw'
-  m = nbnd
+ ! print*, 'chiama diag_bands_gipaw'
+ ! m = nbnd
   IF( ierr /= 0 ) &
      CALL errore( ' diag_bands ', ' cannot allocate h_diag ', ABS(ierr) )
   !
@@ -701,7 +701,7 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
     ! --- Define a small number ---
     INTEGER :: j
     !
-    m = nbnd 
+!    m = nbnd 
     !write (*,*) ' enter diag_bands_k'; FLUSH(6)
     IF ( lelfield ) THEN
        !
@@ -1038,7 +1038,6 @@ SUBROUTINE diag_bands_gipaw( iter, ik, avg_iter )
                 !
              ELSE
                 !
-!                print*, 'chiama la sub cegterg'
                 CALL cegterg ( h_psi_gipaw, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )

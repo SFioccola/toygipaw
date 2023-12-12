@@ -53,6 +53,7 @@
   
   !debug mpi 
   integer :: ierr, num_procs, rank, root, i, dd, comm_rank
+  integer :: ibnd_start, ibnd_end
   real :: partial_value, gathered_kp_berry(6)
 
   ind(:,1) = (/ 2, 3 /)
@@ -100,14 +101,16 @@
   allocate(vkb_save(npwx,nkb), aux(nkb,nbnd))
 #define __USE_BARRIER
    
-  CALL set_dvrs( dvrs, vrs, dffts%nnr, nspin ) 
+  CALL set_dvrs( dvrs, vrs, dfftp%nnr, nspin ) 
 
    ! loop over k-points
   do ik = 1, nks
     npw = ngk(ik)
     call find_nbnd_occ(ik, occ, emin, emax)
     if (lgauss) occ = nbnd
-
+    !
+    call divide(inter_bgrp_comm, occ, ibnd_start, ibnd_end)
+    !
     ! setup the hamiltonian
     current_k = ik
     current_spin = 1
@@ -141,7 +144,8 @@
       kp_berry(kk) = 0.d0
       kp_M_IC(kk) = 0.d0
       kp_M_LC(kk) = 0.d0
-      do ibnd = 1, occ
+!      do ibnd = 1, occ
+       do ibnd = ibnd_start, ibnd_end
        ! IC term and Berry curvature
         braket = zdotc(ngk(ik), dudk_bra(1,ibnd), 1, dudk_ket(1,ibnd), 1)
         kp_berry(kk) = kp_berry(kk) + 2.d0*wg(ibnd,ik)*imag(braket)
@@ -172,9 +176,9 @@
   call mp_sum( kp_berry, intra_bgrp_comm )
   call mp_sum( kp_M_LC, intra_bgrp_comm )
   call mp_sum( kp_M_IC, intra_bgrp_comm )
-!  call mp_sum( kp_berry, intra_pool_comm )
-!  call mp_sum( kp_M_LC, intra_pool_comm )
-!  call mp_sum( kp_M_IC, intra_pool_comm )
+  call mp_sum( kp_berry, inter_bgrp_comm )
+  call mp_sum( kp_M_LC, inter_bgrp_comm )
+  call mp_sum( kp_M_IC, inter_bgrp_comm )
 #endif
   
     if (me_pool == root_pool) then
@@ -191,9 +195,9 @@
   call mp_sum(orb_magn_LC, intra_bgrp_comm )
   call mp_sum(orb_magn_IC, intra_bgrp_comm )
   call mp_sum(berry_curvature, intra_bgrp_comm )
-!  call mp_sum(orb_magn_LC, intra_pool_comm )
-!  call mp_sum(orb_magn_IC, intra_pool_comm )
-!  call mp_sum(berry_curvature, intra_pool_comm )
+  call mp_sum(orb_magn_LC, inter_bgrp_comm )
+  call mp_sum(orb_magn_IC, inter_bgrp_comm )
+  call mp_sum(berry_curvature, inter_bgrp_comm )
 #endif
   
   ! no reduction for delta_M_bare and delta_M_para and delta_M_dia 

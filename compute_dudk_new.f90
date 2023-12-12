@@ -115,6 +115,7 @@ END SUBROUTINE compute_dudk_new
   real(dp) :: q_gipaw3(3), delta_k
   integer :: ik, i, occ, sig 
   integer :: ibnd, jbnd, ipol
+  integer :: ibnd_start, ibnd_end
 
   if (occ == 0) return
 
